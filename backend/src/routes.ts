@@ -1,0 +1,160 @@
+import type { FastifyInstance } from "fastify"
+import {
+  createPlanInputSchema,
+  createWorkoutSessionInputSchema,
+  updatePlanDayInputSchema,
+  updateWorkoutSessionInputSchema,
+  workoutSetInputSchema,
+} from "@my-progress/shared"
+import { requireUser } from "./plugins/auth.js"
+import { InMemoryRepository } from "./repositories/in-memory-repository.js"
+
+export async function registerRoutes(app: FastifyInstance) {
+  const repository = new InMemoryRepository()
+
+  app.addHook("preHandler", requireUser)
+
+  app.get("/health", async () => ({ ok: true }))
+
+  app.get("/exercises", async () => repository.getExercises())
+
+  app.get("/plans", async (request) => repository.getPlans(request.user.id))
+
+  app.post("/plans", async (request, reply) => {
+    const input = createPlanInputSchema.parse(request.body)
+    const plan = repository.createPlan(request.user.id, input)
+    return reply.code(201).send(plan)
+  })
+
+  app.get("/plans/:id", async (request, reply) => {
+    const plan = repository.getPlan(request.user.id, (request.params as { id: string }).id)
+    if (!plan) {
+      return reply.code(404).send({ message: "Plan not found." })
+    }
+    return plan
+  })
+
+  app.put("/plans/:id", async (request, reply) => {
+    const plan = repository.updatePlan(request.user.id, (request.params as { id: string }).id, request.body as never)
+    if (!plan) {
+      return reply.code(404).send({ message: "Plan not found." })
+    }
+    return plan
+  })
+
+  app.put("/plans/:id/days/:dayId", async (request, reply) => {
+    const params = request.params as { id: string; dayId: string }
+    const input = updatePlanDayInputSchema.parse(request.body)
+    const plan = repository.getPlan(request.user.id, params.id)
+    if (!plan) {
+      return reply.code(404).send({ message: "Plan not found." })
+    }
+
+    const days = plan.days.map((day) =>
+      day.id === params.dayId
+        ? {
+            ...day,
+            name: input.name ?? day.name,
+            order: input.order ?? day.order,
+            exercises: input.exercises
+              ? input.exercises.map((exercise) => ({
+                  id: exercise.id ?? `plan-exercise-${exercise.exerciseId}`,
+                  planDayId: day.id,
+                  exerciseId: exercise.exerciseId,
+                  exerciseName: exercise.exerciseName,
+                  targetSets: exercise.targetSets,
+                  targetReps: exercise.targetReps,
+                  restSeconds: exercise.restSeconds,
+                  notes: exercise.notes,
+                }))
+              : day.exercises,
+          }
+        : day,
+    )
+
+    return repository.updatePlan(request.user.id, params.id, { days })
+  })
+
+  app.post("/plans/:id/activate", async (request, reply) => {
+    const plan = repository.activatePlan(request.user.id, (request.params as { id: string }).id)
+    if (!plan) {
+      return reply.code(404).send({ message: "Plan not found." })
+    }
+    return plan
+  })
+
+  app.delete("/plans/:id", async (request, reply) => {
+    const plan = repository.archivePlan(request.user.id, (request.params as { id: string }).id)
+    if (!plan) {
+      return reply.code(404).send({ message: "Plan not found." })
+    }
+    return reply.code(204).send()
+  })
+
+  app.get("/home/today", async (request) => repository.getHome(request.user.id))
+
+  app.post("/workout-sessions", async (request, reply) => {
+    const input = createWorkoutSessionInputSchema.parse(request.body)
+    const session = repository.createWorkoutSession(request.user.id, input)
+    if (!session) {
+      return reply.code(404).send({ message: "Plan or day not found." })
+    }
+    return reply.code(201).send(session)
+  })
+
+  app.get("/workout-sessions/:id", async (request, reply) => {
+    const session = repository.getWorkoutSession(request.user.id, (request.params as { id: string }).id)
+    if (!session) {
+      return reply.code(404).send({ message: "Session not found." })
+    }
+    return session
+  })
+
+  app.post("/workout-sessions/:id/exercises/:exerciseId/sets", async (request, reply) => {
+    const params = request.params as { id: string; exerciseId: string }
+    const input = workoutSetInputSchema.parse(request.body)
+    const session = repository.upsertWorkoutSet(request.user.id, params.id, params.exerciseId, input)
+    if (!session) {
+      return reply.code(404).send({ message: "Session or exercise not found." })
+    }
+    return session
+  })
+
+  app.put("/workout-sessions/:id", async (request, reply) => {
+    const params = request.params as { id: string }
+    const input = updateWorkoutSessionInputSchema.parse(request.body)
+    const session = repository.updateWorkoutSession(request.user.id, params.id, input)
+    if (!session) {
+      return reply.code(404).send({ message: "Session not found." })
+    }
+    return session
+  })
+
+  app.post("/workout-sessions/:id/complete", async (request, reply) => {
+    const session = repository.completeWorkoutSession(request.user.id, (request.params as { id: string }).id)
+    if (!session) {
+      return reply.code(404).send({ message: "Session not found." })
+    }
+    return session
+  })
+
+  app.get("/history", async (request) => repository.getHistory(request.user.id))
+
+  app.get("/history/:id", async (request, reply) => {
+    const session = repository.getWorkoutSession(request.user.id, (request.params as { id: string }).id)
+    if (!session) {
+      return reply.code(404).send({ message: "Session not found." })
+    }
+    return session
+  })
+
+  app.get("/progress/exercises", async (request) => repository.getProgressExercises(request.user.id))
+
+  app.get("/progress/exercises/:exerciseId", async (request, reply) => {
+    const series = repository.getProgressSeries(request.user.id, (request.params as { exerciseId: string }).exerciseId)
+    if (!series) {
+      return reply.code(404).send({ message: "Exercise not found." })
+    }
+    return series
+  })
+}
