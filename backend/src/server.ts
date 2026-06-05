@@ -1,3 +1,4 @@
+import "./lib/env.js"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { registerRoutes } from "./routes.js"
