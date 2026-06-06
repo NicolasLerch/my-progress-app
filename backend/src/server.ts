@@ -1,6 +1,7 @@
 import "./lib/env.js"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
+import { prisma } from "./lib/prisma.js"
 import { registerRoutes } from "./routes.js"
 
 async function buildServer() {
@@ -12,6 +13,10 @@ async function buildServer() {
   })
 
   await registerRoutes(app)
+
+  app.addHook("onClose", async () => {
+    await prisma.$disconnect()
+  })
 
   return app
 }
