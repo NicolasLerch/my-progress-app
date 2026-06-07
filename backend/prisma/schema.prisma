@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PlanStatus {
+  draft
+  active
+  archived
+  completed
+}
+
+enum WorkoutSessionStatus {
+  in_progress
+  completed
+  abandoned
+}
+
+model User {
+  id              String           @id
+  email           String           @unique
+  name            String
+  createdAt       DateTime         @default(now())
+  plans           Plan[]
+  workoutSessions WorkoutSession[]
+}
+
+model Exercise {
+  id               String            @id
+  name             String
+  muscleGroup      String
+  planExercises    PlanExercise[]
+  workoutExercises WorkoutExercise[]
+}
+
+model Plan {
+  id              String           @id @default(cuid())
+  userId          String
+  name            String
+  startDate       DateTime
+  endDate         DateTime?
+  status          PlanStatus       @default(draft)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  currentDay      Int              @default(1)
+  totalDays       Int
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  days            PlanDay[]
+  workoutSessions WorkoutSession[]
+
+  @@index([userId, status])
+}
+
+model PlanDay {
+  id              String           @id @default(cuid())
+  planId          String
+  name            String
+  order           Int
+  plan            Plan             @relation(fields: [planId], references: [id], onDelete: Cascade)
+  exercises       PlanExercise[]
+  workoutSessions WorkoutSession[]
+
+  @@unique([planId, order])
+}
+
+model PlanExercise {
+  id          String   @id @default(cuid())
+  planDayId   String
+  exerciseId  String
+  targetSets  Int
+  targetReps  Int
+  restSeconds Int
+  notes       String?
+  planDay     PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+}
+
+model WorkoutSession {
+  id              String               @id @default(cuid())
+  userId          String
+  planId          String?
+  planDayId       String?
+  date            DateTime
+  notes           String?
+  status          WorkoutSessionStatus @default(in_progress)
+  startedAt       DateTime
+  completedAt     DateTime?
+  durationMinutes Int?
+  planName        String
+  dayName         String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            Plan?                @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planDay         PlanDay?             @relation(fields: [planDayId], references: [id], onDelete: Restrict)
+  exercises       WorkoutExercise[]
+
+  @@index([userId, status, date])
+}
+
+model WorkoutExercise {
+  id                String         @id @default(cuid())
+  workoutSessionId  String
+  exerciseId        String
+  exerciseName      String
+  planExerciseId    String?
+  targetSets        Int
+  targetReps        Int
+  restSeconds       Int
+  notes             String?
+  workoutSession    WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise          Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  sets              WorkoutSet[]
+
+  @@unique([workoutSessionId, exerciseId])
+}
+
+model WorkoutSet {
+  id                String          @id @default(cuid())
+  workoutExerciseId String
+  setNumber         Int
+  weight            Decimal         @db.Decimal(10, 2)
+  reps              Int
+  rir               Int?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutExerciseId, setNumber])
+}
