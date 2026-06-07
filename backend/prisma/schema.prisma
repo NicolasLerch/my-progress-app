@@ -83,8 +83,8 @@ model PlanExercise {
 model WorkoutSession {
   id              String               @id @default(cuid())
   userId          String
-  planId          String
-  planDayId       String
+  planId          String?
+  planDayId       String?
   date            DateTime
   notes           String?
   status          WorkoutSessionStatus @default(in_progress)
@@ -94,8 +94,8 @@ model WorkoutSession {
   planName        String
   dayName         String
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan            Plan                 @relation(fields: [planId], references: [id], onDelete: Restrict)
-  planDay         PlanDay              @relation(fields: [planDayId], references: [id], onDelete: Restrict)
+  plan            Plan?                @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planDay         PlanDay?             @relation(fields: [planDayId], references: [id], onDelete: Restrict)
   exercises       WorkoutExercise[]
 
   @@index([userId, status, date])

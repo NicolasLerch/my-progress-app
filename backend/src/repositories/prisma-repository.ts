@@ -5,6 +5,7 @@ import {
   createPlanInputSchema,
   demoUser,
   type CreatePlanInputDTO,
+  type CreatePlannedWorkoutSessionInputDTO,
   type CreateWorkoutSessionInputDTO,
   type ExerciseDTO,
   type HistoryItemDTO,
@@ -100,8 +101,8 @@ function mapWorkoutSession(session: WorkoutSessionWithRelations): WorkoutSession
   return {
     id: session.id,
     userId: session.userId,
-    planId: session.planId,
-    planDayId: session.planDayId,
+    planId: session.planId ?? undefined,
+    planDayId: session.planDayId ?? undefined,
     date: session.date.toISOString(),
     notes: session.notes ?? undefined,
     status: session.status,
@@ -480,12 +481,32 @@ export class PrismaRepository {
   async createWorkoutSession(userId: string, input: CreateWorkoutSessionInputDTO): Promise<WorkoutSessionDTO | null> {
     await this.ensureUser({ id: userId })
 
+    if ("mode" in input && input.mode === "planless") {
+      const session = await this.prisma.workoutSession.create({
+        data: {
+          userId,
+          planId: null,
+          planDayId: null,
+          date: new Date(input.date),
+          status: "in_progress",
+          startedAt: new Date(input.date),
+          planName: "Entrenamiento libre",
+          dayName: "Sesion sin plan",
+        },
+        include: workoutSessionInclude,
+      })
+
+      return mapWorkoutSession(session)
+    }
+
+    const plannedInput = input as CreatePlannedWorkoutSessionInputDTO
+
     const plan = await this.prisma.plan.findFirst({
-      where: { id: input.planId, userId },
+      where: { id: plannedInput.planId, userId },
       include: planInclude,
     })
 
-    const day = plan?.days.find((item) => item.id === input.planDayId)
+    const day = plan?.days.find((item) => item.id === plannedInput.planDayId)
 
     if (!plan || !day) {
       return null
@@ -496,9 +517,9 @@ export class PrismaRepository {
         userId,
         planId: plan.id,
         planDayId: day.id,
-        date: new Date(input.date),
+        date: new Date(plannedInput.date),
         status: "in_progress",
-        startedAt: new Date(input.date),
+        startedAt: new Date(plannedInput.date),
         planName: plan.name,
         dayName: day.name,
         exercises: {
@@ -517,6 +538,53 @@ export class PrismaRepository {
     })
 
     return mapWorkoutSession(session)
+  }
+
+  async addWorkoutExercise(
+    userId: string,
+    sessionId: string,
+    exerciseId: string,
+  ): Promise<WorkoutSessionDTO | null> {
+    const session = await this.prisma.workoutSession.findFirst({
+      where: { id: sessionId, userId },
+      select: { id: true },
+    })
+
+    if (!session) {
+      return null
+    }
+
+    const exercise = await this.prisma.exercise.findUnique({
+      where: { id: exerciseId },
+      select: { id: true, name: true },
+    })
+
+    if (!exercise) {
+      return null
+    }
+
+    const existingExercise = await this.prisma.workoutExercise.findFirst({
+      where: {
+        workoutSessionId: sessionId,
+        exerciseId,
+      },
+      select: { id: true },
+    })
+
+    if (!existingExercise) {
+      await this.prisma.workoutExercise.create({
+        data: {
+          workoutSessionId: sessionId,
+          exerciseId,
+          exerciseName: exercise.name,
+          targetSets: 0,
+          targetReps: 0,
+          restSeconds: 0,
+        },
+      })
+    }
+
+    return this.getWorkoutSession(userId, sessionId)
   }
 
   async getWorkoutSession(userId: string, sessionId: string): Promise<WorkoutSessionDTO | null> {
@@ -713,8 +781,8 @@ export class PrismaRepository {
     const sessions: WorkoutSessionDTO[] = rows.map((row) => ({
       id: row.workoutSession.id,
       userId: row.workoutSession.userId,
-      planId: row.workoutSession.planId,
-      planDayId: row.workoutSession.planDayId,
+      planId: row.workoutSession.planId ?? undefined,
+      planDayId: row.workoutSession.planDayId ?? undefined,
       date: row.workoutSession.date.toISOString(),
       notes: row.workoutSession.notes ?? undefined,
       status: row.workoutSession.status,

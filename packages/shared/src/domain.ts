@@ -75,8 +75,8 @@ export interface WorkoutExerciseDTO {
 export interface WorkoutSessionDTO {
   id: string
   userId: string
-  planId: string
-  planDayId: string
+  planId?: string
+  planDayId?: string
   date: string
   notes?: string
   status: WorkoutSessionStatus
@@ -149,10 +149,23 @@ export interface WorkoutSetInputDTO {
   updatedAt: string
 }
 
-export interface CreateWorkoutSessionInputDTO {
+export interface CreatePlannedWorkoutSessionInputDTO {
   planId: string
   planDayId: string
   date: string
+}
+
+export interface CreatePlanlessWorkoutSessionInputDTO {
+  mode: "planless"
+  date: string
+}
+
+export type CreateWorkoutSessionInputDTO =
+  | CreatePlannedWorkoutSessionInputDTO
+  | CreatePlanlessWorkoutSessionInputDTO
+
+export interface CreateWorkoutExerciseInputDTO {
+  exerciseId: string
 }
 
 export interface CreatePlanInputDTO {
