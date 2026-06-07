@@ -16,7 +16,7 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4 pb-4">
       <div>
         <h1 className="text-xl font-bold">Ajustes</h1>
-        <p className="text-sm text-muted-foreground">Cuenta delegada a Supabase en la siguiente iteracion.</p>
+        <p className="text-sm text-muted-foreground">Cuenta pendiente de integrar con el backend Prisma en la siguiente iteracion.</p>
       </div>
       <Card>
         <CardContent className="p-4 flex flex-col gap-2">
