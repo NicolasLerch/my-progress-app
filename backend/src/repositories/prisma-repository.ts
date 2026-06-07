@@ -251,43 +251,105 @@ export class PrismaRepository {
       })
 
       if (partial.days) {
-        await tx.planExercise.deleteMany({
-          where: {
-            planDay: {
+        const existingDayIds = new Set(existing.days.map((day) => day.id))
+        const incomingDayIds = new Set(partial.days.map((day) => day.id))
+        const removedDayIds = existing.days
+          .map((day) => day.id)
+          .filter((dayId) => !incomingDayIds.has(dayId))
+
+        if (removedDayIds.length > 0) {
+          const linkedSessions = await tx.workoutSession.count({
+            where: {
+              userId,
               planId,
+              planDayId: {
+                in: removedDayIds,
+              },
             },
-          },
-        })
+          })
 
-        await tx.planDay.deleteMany({
-          where: { planId },
-        })
-
-        await tx.planDay.createMany({
-          data: partial.days.map((day) => ({
-            id: day.id,
-            planId,
-            name: day.name,
-            order: day.order,
-          })),
-        })
-
-        for (const day of partial.days) {
-          if (day.exercises.length === 0) {
-            continue
+          if (linkedSessions > 0) {
+            throw new Error("No se pueden eliminar dias que ya tienen entrenamientos registrados.")
           }
 
-          await tx.planExercise.createMany({
-            data: day.exercises.map((exercise) => ({
-              id: exercise.id,
-              planDayId: day.id,
-              exerciseId: exercise.exerciseId,
-              targetSets: exercise.targetSets,
-              targetReps: exercise.targetReps,
-              restSeconds: exercise.restSeconds,
-              notes: exercise.notes,
-            })),
+          await tx.planExercise.deleteMany({
+            where: {
+              planDayId: {
+                in: removedDayIds,
+              },
+            },
           })
+
+          await tx.planDay.deleteMany({
+            where: {
+              id: {
+                in: removedDayIds,
+              },
+            },
+          })
+        }
+
+        for (const day of partial.days) {
+          if (existingDayIds.has(day.id)) {
+            await tx.planDay.update({
+              where: { id: day.id },
+              data: {
+                name: day.name,
+                order: day.order,
+              },
+            })
+          } else {
+            await tx.planDay.create({
+              data: {
+                id: day.id,
+                planId,
+                name: day.name,
+                order: day.order,
+              },
+            })
+          }
+
+          const existingDay = existing.days.find((item) => item.id === day.id)
+          const existingExerciseIds = new Set(existingDay?.exercises.map((exercise) => exercise.id) ?? [])
+          const incomingExerciseIds = new Set(day.exercises.map((exercise) => exercise.id))
+          const removedExerciseIds = [...existingExerciseIds].filter((exerciseId) => !incomingExerciseIds.has(exerciseId))
+
+          if (removedExerciseIds.length > 0) {
+            await tx.planExercise.deleteMany({
+              where: {
+                id: {
+                  in: removedExerciseIds,
+                },
+              },
+            })
+          }
+
+          for (const exercise of day.exercises) {
+            if (existingExerciseIds.has(exercise.id)) {
+              await tx.planExercise.update({
+                where: { id: exercise.id },
+                data: {
+                  exerciseId: exercise.exerciseId,
+                  targetSets: exercise.targetSets,
+                  targetReps: exercise.targetReps,
+                  restSeconds: exercise.restSeconds,
+                  notes: exercise.notes,
+                },
+              })
+            } else {
+              await tx.planExercise.create({
+                data: {
+                  id: exercise.id,
+                  planDayId: day.id,
+                  exerciseId: exercise.exerciseId,
+                  targetSets: exercise.targetSets,
+                  targetReps: exercise.targetReps,
+                  restSeconds: exercise.restSeconds,
+                  notes: exercise.notes,
+                },
+              })
+            }
+          }
         }
       }
 
@@ -331,6 +393,29 @@ export class PrismaRepository {
 
   async archivePlan(userId: string, planId: string): Promise<PlanDTO | null> {
     return this.updatePlan(userId, planId, { status: "archived" })
+  }
+
+  async deletePlan(userId: string, planId: string): Promise<boolean> {
+    const existing = await this.prisma.plan.findFirst({
+      where: { id: planId, userId },
+      select: { id: true },
+    })
+
+    if (!existing) {
+      return false
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workoutSession.deleteMany({
+        where: { userId, planId },
+      })
+
+      await tx.plan.delete({
+        where: { id: planId },
+      })
+    })
+
+    return true
   }
 
   async getHome(user: { id: string; email: string; name: string }): Promise<HomeTodayDTO> {

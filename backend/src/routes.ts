@@ -89,8 +89,8 @@ export async function registerRoutes(app: FastifyInstance) {
   })
 
   app.delete("/plans/:id", async (request, reply) => {
-    const plan = await repository.archivePlan(request.user.id, (request.params as { id: string }).id)
-    if (!plan) {
+    const deleted = await repository.deletePlan(request.user.id, (request.params as { id: string }).id)
+    if (!deleted) {
       return reply.code(404).send({ message: "Plan not found." })
     }
     return reply.code(204).send()

@@ -43,9 +43,11 @@ export const api = {
   getPlan: (planId: string) => request<PlanDTO>(`/plans/${planId}`),
   createPlan: (input: CreatePlanInputDTO) =>
     request<PlanDTO>("/plans", { method: "POST", body: JSON.stringify(input) }),
+  updatePlan: (planId: string, input: Partial<PlanDTO>) =>
+    request<PlanDTO>(`/plans/${planId}`, { method: "PUT", body: JSON.stringify(input) }),
   activatePlan: (planId: string) =>
     request<PlanDTO>(`/plans/${planId}/activate`, { method: "POST" }),
-  archivePlan: (planId: string) =>
+  deletePlan: (planId: string) =>
     request<void>(`/plans/${planId}`, { method: "DELETE" }),
   createWorkoutSession: (input: CreateWorkoutSessionInputDTO) =>
     request<WorkoutSessionDTO>("/workout-sessions", { method: "POST", body: JSON.stringify(input) }),
