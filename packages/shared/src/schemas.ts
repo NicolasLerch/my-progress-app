@@ -13,10 +13,20 @@ export const workoutSetInputSchema = z.object({
   updatedAt: z.string().datetime(),
 })
 
-export const createWorkoutSessionInputSchema = z.object({
-  planId: z.string().min(1),
-  planDayId: z.string().min(1),
-  date: z.string().datetime(),
+export const createWorkoutSessionInputSchema = z.union([
+  z.object({
+    planId: z.string().min(1),
+    planDayId: z.string().min(1),
+    date: z.string().datetime(),
+  }),
+  z.object({
+    mode: z.literal("planless"),
+    date: z.string().datetime(),
+  }),
+])
+
+export const createWorkoutExerciseInputSchema = z.object({
+  exerciseId: z.string().min(1),
 })
 
 export const createPlanInputSchema = z.object({

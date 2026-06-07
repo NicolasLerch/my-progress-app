@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import {
   createPlanInputSchema,
+  createWorkoutExerciseInputSchema,
   createWorkoutSessionInputSchema,
   updatePlanDayInputSchema,
   updateWorkoutSessionInputSchema,
@@ -119,6 +120,16 @@ export async function registerRoutes(app: FastifyInstance) {
     const params = request.params as { id: string; exerciseId: string }
     const input = workoutSetInputSchema.parse(request.body)
     const session = await repository.upsertWorkoutSet(request.user.id, params.id, params.exerciseId, input)
+    if (!session) {
+      return reply.code(404).send({ message: "Session or exercise not found." })
+    }
+    return session
+  })
+
+  app.post("/workout-sessions/:id/exercises", async (request, reply) => {
+    const params = request.params as { id: string }
+    const input = createWorkoutExerciseInputSchema.parse(request.body)
+    const session = await repository.addWorkoutExercise(request.user.id, params.id, input.exerciseId)
     if (!session) {
       return reply.code(404).send({ message: "Session or exercise not found." })
     }
