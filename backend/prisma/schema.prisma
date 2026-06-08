@@ -25,6 +25,8 @@ model User {
   id              String           @id
   email           String           @unique
   name            String
+  lastName        String?
+  birthDate       DateTime?        @db.Date
   createdAt       DateTime         @default(now())
   plans           Plan[]
   workoutSessions WorkoutSession[]

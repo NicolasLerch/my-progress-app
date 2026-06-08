@@ -27,6 +27,8 @@ async function seed() {
       id: demoUser.id,
       email: demoUser.email,
       name: demoUser.name,
+      lastName: demoUser.lastName,
+      birthDate: demoUser.birthDate ? new Date(demoUser.birthDate) : null,
       createdAt: new Date(demoUser.createdAt),
     },
   })

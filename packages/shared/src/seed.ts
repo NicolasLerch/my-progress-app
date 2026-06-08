@@ -11,6 +11,8 @@ export const demoUser: UserDTO = {
   id: "user-demo",
   email: "carlos@example.com",
   name: "Carlos",
+  lastName: "Gomez",
+  birthDate: "1997-03-12",
   createdAt: "2024-01-15T00:00:00.000Z",
 }
 
