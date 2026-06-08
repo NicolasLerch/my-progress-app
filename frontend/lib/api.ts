@@ -10,6 +10,7 @@ import type {
   WorkoutSessionDTO,
   WorkoutSetInputDTO,
 } from "@my-progress/shared"
+import { supabase } from "@/lib/supabase"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
 
@@ -18,6 +19,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
   }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session?.access_token) {
+    throw new Error("No hay una sesion activa.")
+  }
+
+  headers.set("Authorization", `Bearer ${session.access_token}`)
 
   const response = await fetch(`${API_URL}${path}`, {
     ...init,

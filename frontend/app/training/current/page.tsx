@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/hooks/use-toast"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 
 function isPlanlessSession(session: WorkoutSessionDTO | null) {
   return Boolean(session && !session.planId)
@@ -41,6 +42,7 @@ function isPlanlessSession(session: WorkoutSessionDTO | null) {
 
 export default function TrainingCurrentPage() {
   const router = useRouter()
+  const { isLoading, isReady, session: authSession } = useAuthReady()
   const [home, setHome] = useState<HomeTodayDTO | null>(null)
   const [session, setSession] = useState<WorkoutSessionDTO | null>(null)
   const [exercises, setExercises] = useState<ExerciseDTO[]>([])
@@ -56,6 +58,7 @@ export default function TrainingCurrentPage() {
   const [cancellingWorkout, setCancellingWorkout] = useState(false)
 
   useEffect(() => {
+    if (!isReady) return
     api.getHome().then(async (payload) => {
       setHome(payload)
       setSelectedPlanDayId(payload.todayDay?.id ?? payload.activePlan?.days[0]?.id ?? "")
@@ -70,7 +73,17 @@ export default function TrainingCurrentPage() {
       setExercises(items)
       setSelectedExerciseId(items[0]?.id ?? "")
     }).catch(() => {})
-  }, [])
+  }, [isReady])
+
+  useEffect(() => {
+    if (!authSession) {
+      setHome(null)
+      setSession(null)
+      setExercises([])
+      setSelectedExerciseId("")
+      setSelectedPlanDayId("")
+    }
+  }, [authSession])
 
   useEffect(() => {
     if (!session) return
@@ -232,6 +245,10 @@ export default function TrainingCurrentPage() {
     () => session?.exercises.reduce((count, exercise) => count + exercise.sets.length, 0) ?? 0,
     [session],
   )
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   if (!home) {
     return <p className="text-sm text-muted-foreground">Cargando entrenamiento...</p>

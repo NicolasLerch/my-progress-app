@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import type { PlanDTO } from '@my-progress/shared'
 import { toast } from '@/hooks/use-toast'
+import { useAuthReady } from '@/hooks/use-auth-ready'
 import { api } from '@/lib/api'
 import { buildPlanInput, PlanForm } from '@/components/plans/plan-form'
 
@@ -11,10 +12,22 @@ export default function EditPlanPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [plan, setPlan] = useState<PlanDTO | null>(null)
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getPlan(params.id).then(setPlan).catch(() => {})
-  }, [params.id])
+  }, [isReady, params.id])
+
+  useEffect(() => {
+    if (!session) {
+      setPlan(null)
+    }
+  }, [session])
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   if (!plan) {
     return <p className="text-sm text-muted-foreground">Cargando plan...</p>

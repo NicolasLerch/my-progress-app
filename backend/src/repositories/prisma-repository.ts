@@ -53,11 +53,23 @@ function decimalToNumber(value: Prisma.Decimal | number) {
   return typeof value === "number" ? value : value.toNumber()
 }
 
-function mapUser(user: { id: string; email: string; name: string; createdAt?: string | Date }): UserDTO {
+function mapUser(user: {
+  id: string
+  email: string
+  name: string
+  lastName?: string | null
+  birthDate?: string | Date | null
+  createdAt?: string | Date
+}): UserDTO {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
+    lastName: user.lastName ?? undefined,
+    birthDate:
+      user.birthDate instanceof Date
+        ? user.birthDate.toISOString().slice(0, 10)
+        : (user.birthDate ?? undefined),
     createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : (user.createdAt ?? demoUser.createdAt),
   }
 }
@@ -419,7 +431,7 @@ export class PrismaRepository {
     return true
   }
 
-  async getHome(user: { id: string; email: string; name: string }): Promise<HomeTodayDTO> {
+  async getHome(user: { id: string; email: string; name: string; lastName?: string; birthDate?: string }): Promise<HomeTodayDTO> {
     await this.ensureUser(user)
 
     const [dbUser, activePlan, currentSession, recentSessions, completedCount, volumeRows] = await Promise.all([
@@ -827,9 +839,11 @@ export class PrismaRepository {
     )
   }
 
-  private async ensureUser(user: { id: string; email?: string; name?: string }) {
+  private async ensureUser(user: { id: string; email?: string; name?: string; lastName?: string; birthDate?: string }) {
     const fallbackEmail = user.id === demoUser.id ? demoUser.email : `${user.id}@local.app`
     const fallbackName = user.id === demoUser.id ? demoUser.name : "Usuario"
+    const fallbackLastName = user.id === demoUser.id ? demoUser.lastName : undefined
+    const fallbackBirthDate = user.id === demoUser.id ? demoUser.birthDate : undefined
 
     await this.prisma.user.upsert({
       where: { id: user.id },
@@ -837,11 +851,15 @@ export class PrismaRepository {
         id: user.id,
         email: user.email ?? fallbackEmail,
         name: user.name ?? fallbackName,
+        lastName: user.lastName ?? fallbackLastName,
+        birthDate: user.birthDate ? new Date(user.birthDate) : fallbackBirthDate ? new Date(fallbackBirthDate) : null,
         createdAt: new Date(demoUser.createdAt),
       },
       update: {
         email: user.email ?? fallbackEmail,
         name: user.name ?? fallbackName,
+        lastName: user.lastName ?? fallbackLastName,
+        birthDate: user.birthDate ? new Date(user.birthDate) : fallbackBirthDate ? new Date(fallbackBirthDate) : undefined,
       },
     })
   }

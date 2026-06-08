@@ -4,15 +4,28 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import type { WorkoutSessionDTO } from "@my-progress/shared"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 
 export default function HistoryDetailPage() {
   const params = useParams<{ id: string }>()
   const [session, setSession] = useState<WorkoutSessionDTO | null>(null)
+  const { isLoading, isReady, session: authSession } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getHistorySession(params.id).then(setSession).catch(() => {})
-  }, [params.id])
+  }, [isReady, params.id])
+
+  useEffect(() => {
+    if (!authSession) {
+      setSession(null)
+    }
+  }, [authSession])
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   if (!session) {
     return <p className="text-sm text-muted-foreground">Cargando sesion...</p>

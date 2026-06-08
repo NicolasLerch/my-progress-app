@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Calendar, ChevronRight, Dumbbell, Play, Trophy } from "lucide-react"
+import { Calendar, ChevronRight, Dumbbell, LoaderCircle, Play, Trophy } from "lucide-react"
 import type { HomeTodayDTO } from "@my-progress/shared"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { api } from "@/lib/api"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 import { formatWeight, formatShortDate } from "@/lib/format"
 import { toast } from "@/hooks/use-toast"
 
@@ -25,6 +26,7 @@ function isPlanlessSession(session?: HomeTodayDTO["currentSession"]) {
 
 export default function HomePage() {
   const router = useRouter()
+  const { isLoading: authLoading, session, isReady } = useAuthReady()
   const [data, setData] = useState<HomeTodayDTO | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [startModalOpen, setStartModalOpen] = useState(false)
@@ -32,8 +34,36 @@ export default function HomePage() {
   const [selectedPlanDayId, setSelectedPlanDayId] = useState("")
 
   useEffect(() => {
-    api.getHome().then(setData).catch((cause: Error) => setError(cause.message))
-  }, [])
+    if (!isReady) {
+      return
+    }
+
+    let cancelled = false
+    setError(null)
+
+    void api.getHome()
+      .then((payload) => {
+        if (!cancelled) {
+          setData(payload)
+        }
+      })
+      .catch((cause: Error) => {
+        if (!cancelled) {
+          setError(cause.message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isReady, session])
+
+  useEffect(() => {
+    if (!session) {
+      setData(null)
+      setError(null)
+    }
+  }, [session])
 
   useEffect(() => {
     if (!data?.activePlan) return
@@ -102,6 +132,21 @@ export default function HomePage() {
 
   if (error) {
     return <p className="text-sm text-destructive">{error}</p>
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <LoaderCircle className="size-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return null
   }
 
   if (!data) {

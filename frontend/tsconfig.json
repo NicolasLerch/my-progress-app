@@ -26,9 +26,6 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@my-progress/shared": [
-        "../packages/shared/src/index.ts"
       ]
     }
   },

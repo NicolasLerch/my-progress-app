@@ -7,14 +7,27 @@ import type { PlanDTO } from "@my-progress/shared"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<PlanDTO[]>([])
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getPlans().then(setPlans).catch(() => {})
-  }, [])
+  }, [isReady])
+
+  useEffect(() => {
+    if (!session) {
+      setPlans([])
+    }
+  }, [session])
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   return (
     <div className="flex flex-col gap-5 pb-4">
