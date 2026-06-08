@@ -4,15 +4,28 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import type { HistoryItemDTO } from "@my-progress/shared"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 import { formatShortDate, formatWeight } from "@/lib/format"
 
 export default function HistoryPage() {
   const [items, setItems] = useState<HistoryItemDTO[]>([])
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getHistory().then(setItems).catch(() => {})
-  }, [])
+  }, [isReady])
+
+  useEffect(() => {
+    if (!session) {
+      setItems([])
+    }
+  }, [session])
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   return (
     <div className="flex flex-col gap-4 pb-4">

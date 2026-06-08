@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shared'
 import { api } from '@/lib/api'
+import { useAuthReady } from '@/hooks/use-auth-ready'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -144,6 +145,7 @@ export function PlanForm({
   const [name, setName] = useState(initialPlan?.name ?? 'Nuevo plan')
   const [days, setDays] = useState<DayForm[]>(initialPlan ? mapPlanToForm(initialPlan).days : [createDayForm(0)])
   const [saving, setSaving] = useState(false)
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
     if (!initialPlan) {
@@ -156,6 +158,10 @@ export function PlanForm({
   }, [initialPlan])
 
   useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
     api.getExercises()
       .then((items) => {
         if (items.length === 0) {
@@ -188,7 +194,14 @@ export function PlanForm({
           description: message,
         })
       })
-  }, [])
+  }, [isReady])
+
+  useEffect(() => {
+    if (!session) {
+      setExercises([])
+      setCatalogError(null)
+    }
+  }, [session])
 
   const validationErrors = useMemo(() => {
     const errors: string[] = []
@@ -331,7 +344,13 @@ export function PlanForm({
         </CardContent>
       </Card>
 
-      {catalogError ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+          </CardContent>
+        </Card>
+      ) : catalogError ? (
         <Card className="border-destructive/40">
           <CardContent className="p-4">
             <p className="text-sm text-destructive">{catalogError}</p>

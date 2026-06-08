@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import type { ExerciseDTO, ProgressSeriesDTO } from "@my-progress/shared"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 import { formatShortDate } from "@/lib/format"
 
@@ -11,25 +12,39 @@ export default function ProgressPage() {
   const [exercises, setExercises] = useState<ExerciseDTO[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [series, setSeries] = useState<ProgressSeriesDTO | null>(null)
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getProgressExercises().then((items) => {
       setExercises(items)
       if (items[0]) {
         setSelectedId(items[0].id)
       }
     }).catch(() => {})
-  }, [])
+  }, [isReady])
 
   useEffect(() => {
-    if (!selectedId) return
+    if (!isReady || !selectedId) return
     api.getProgressSeries(selectedId).then(setSeries).catch(() => {})
-  }, [selectedId])
+  }, [isReady, selectedId])
+
+  useEffect(() => {
+    if (!session) {
+      setExercises([])
+      setSelectedId("")
+      setSeries(null)
+    }
+  }, [session])
 
   const chartData = useMemo(
     () => series?.points.map((point) => ({ ...point, displayDate: formatShortDate(point.date) })) ?? [],
     [series],
   )
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   return (
     <div className="flex flex-col gap-4 pb-4">

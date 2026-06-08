@@ -1,18 +1,23 @@
 "use client"
 
 import { usePathname } from "next/navigation"
+import { AuthGate } from "@/components/auth-gate"
 import { BottomNav } from "@/components/bottom-nav"
 import { PwaRegister } from "@/components/pwa-register"
+import { useAuth } from "@/lib/auth"
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const hideNav = pathname.startsWith("/plans/new")
+  const { session } = useAuth()
+  const hideNav = !session || pathname.startsWith("/plans/new")
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="max-w-lg mx-auto px-4 pt-6 pb-24">{children}</main>
-      {!hideNav && <BottomNav />}
-      <PwaRegister />
-    </div>
+    <AuthGate>
+      <div className="min-h-screen bg-background">
+        <main className="max-w-lg mx-auto px-4 pt-6 pb-24">{children}</main>
+        {!hideNav && <BottomNav />}
+        <PwaRegister />
+      </div>
+    </AuthGate>
   )
 }

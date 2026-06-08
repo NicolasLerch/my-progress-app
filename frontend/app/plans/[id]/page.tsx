@@ -20,16 +20,29 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useAuthReady } from '@/hooks/use-auth-ready'
 
 export default function PlanDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [plan, setPlan] = useState<PlanDTO | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
+    if (!isReady) return
     api.getPlan(params.id).then(setPlan).catch(() => {})
-  }, [params.id])
+  }, [isReady, params.id])
+
+  useEffect(() => {
+    if (!session) {
+      setPlan(null)
+    }
+  }, [session])
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+  }
 
   async function handleDelete() {
     if (!plan) {
