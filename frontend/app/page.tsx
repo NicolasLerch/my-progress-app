@@ -167,7 +167,7 @@ export default function HomePage() {
             <h1 className="text-2xl font-bold text-foreground">{data.user.name}</h1>
           </div>
           <Link href="/settings" className="text-sm text-primary font-medium">
-            Ajustes
+            Mi Perfil
           </Link>
         </div>
 

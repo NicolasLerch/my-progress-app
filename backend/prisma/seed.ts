@@ -29,6 +29,8 @@ async function seed() {
       name: demoUser.name,
       lastName: demoUser.lastName,
       birthDate: demoUser.birthDate ? new Date(demoUser.birthDate) : null,
+      weight: demoUser.weight ? decimal(demoUser.weight) : null,
+      height: demoUser.height ? decimal(demoUser.height) : null,
       createdAt: new Date(demoUser.createdAt),
     },
   })

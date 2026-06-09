@@ -26,6 +26,7 @@ interface AuthContextValue {
   isLoading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (input: SignUpInput) => Promise<void>
+  updatePassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -138,6 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         const { error } = await supabase.auth.signOut()
+        if (error) {
+          throw error
+        }
+      },
+      async updatePassword(password) {
+        const { error } = await supabase.auth.updateUser({ password })
         if (error) {
           throw error
         }
