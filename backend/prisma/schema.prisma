@@ -27,6 +27,8 @@ model User {
   name            String
   lastName        String?
   birthDate       DateTime?        @db.Date
+  weight          Decimal?         @db.Decimal(5, 2)
+  height          Decimal?         @db.Decimal(5, 2)
   createdAt       DateTime         @default(now())
   plans           Plan[]
   workoutSessions WorkoutSession[]

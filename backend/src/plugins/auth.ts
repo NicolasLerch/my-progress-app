@@ -10,8 +10,25 @@ declare module "fastify" {
       name: string
       lastName?: string
       birthDate?: string
+      weight?: number
+      height?: number
     }
   }
+}
+
+function parseOptionalNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return undefined
 }
 
 export async function requireUser(request: FastifyRequest, reply: FastifyReply) {
@@ -68,5 +85,7 @@ export async function requireUser(request: FastifyRequest, reply: FastifyReply) 
         : typeof metadata?.birth_date === "string"
           ? metadata.birth_date
           : undefined,
+    weight: parseOptionalNumber(metadata?.weight),
+    height: parseOptionalNumber(metadata?.height),
   }
 }

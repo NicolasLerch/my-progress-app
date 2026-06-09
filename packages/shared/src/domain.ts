@@ -7,7 +7,19 @@ export interface UserDTO {
   name: string
   lastName?: string
   birthDate?: string
+  weight?: number
+  height?: number
   createdAt: string
+}
+
+export interface UserProfileDTO {
+  user: UserDTO
+  bmi?: number
+}
+
+export interface UpdateUserProfileInputDTO {
+  weight?: number
+  height?: number
 }
 
 export interface ExerciseDTO {

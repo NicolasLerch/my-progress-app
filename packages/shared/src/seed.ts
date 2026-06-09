@@ -13,6 +13,8 @@ export const demoUser: UserDTO = {
   name: "Carlos",
   lastName: "Gomez",
   birthDate: "1997-03-12",
+  weight: 82,
+  height: 178,
   createdAt: "2024-01-15T00:00:00.000Z",
 }
 

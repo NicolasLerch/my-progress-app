@@ -13,6 +13,8 @@ import {
   type PlanDTO,
   type PlanExerciseDTO,
   type ProgressSeriesDTO,
+  type UpdateUserProfileInputDTO,
+  type UserProfileDTO,
   type UserDTO,
   type WorkoutSessionDTO,
   type WorkoutSetInputDTO,
@@ -59,6 +61,8 @@ function mapUser(user: {
   name: string
   lastName?: string | null
   birthDate?: string | Date | null
+  weight?: Prisma.Decimal | number | null
+  height?: Prisma.Decimal | number | null
   createdAt?: string | Date
 }): UserDTO {
   return {
@@ -70,8 +74,19 @@ function mapUser(user: {
       user.birthDate instanceof Date
         ? user.birthDate.toISOString().slice(0, 10)
         : (user.birthDate ?? undefined),
+    weight: user.weight == null ? undefined : decimalToNumber(user.weight),
+    height: user.height == null ? undefined : decimalToNumber(user.height),
     createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : (user.createdAt ?? demoUser.createdAt),
   }
+}
+
+function calculateBmi(weight?: number, height?: number) {
+  if (!weight || !height || height <= 0) {
+    return undefined
+  }
+
+  const meters = height / 100
+  return Number((weight / (meters * meters)).toFixed(1))
 }
 
 function mapPlanExercise(exercise: PlanWithRelations["days"][number]["exercises"][number]): PlanExerciseDTO {
@@ -490,6 +505,58 @@ export class PrismaRepository {
     }
   }
 
+  async getProfile(user: {
+    id: string
+    email: string
+    name: string
+    lastName?: string
+    birthDate?: string
+    weight?: number
+    height?: number
+  }): Promise<UserProfileDTO> {
+    await this.ensureUser(user)
+
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+    })
+
+    const mappedUser = mapUser(dbUser ?? { ...user, createdAt: demoUser.createdAt })
+
+    return {
+      user: mappedUser,
+      bmi: calculateBmi(mappedUser.weight, mappedUser.height),
+    }
+  }
+
+  async updateProfile(
+    userId: string,
+    input: UpdateUserProfileInputDTO,
+  ): Promise<UserProfileDTO | null> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+
+    if (!existing) {
+      return null
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        weight: input.weight == null ? null : new Prisma.Decimal(input.weight),
+        height: input.height == null ? null : new Prisma.Decimal(input.height),
+      },
+    })
+
+    const mappedUser = mapUser(updatedUser)
+
+    return {
+      user: mappedUser,
+      bmi: calculateBmi(mappedUser.weight, mappedUser.height),
+    }
+  }
+
   async createWorkoutSession(userId: string, input: CreateWorkoutSessionInputDTO): Promise<WorkoutSessionDTO | null> {
     await this.ensureUser({ id: userId })
 
@@ -839,11 +906,21 @@ export class PrismaRepository {
     )
   }
 
-  private async ensureUser(user: { id: string; email?: string; name?: string; lastName?: string; birthDate?: string }) {
+  private async ensureUser(user: {
+    id: string
+    email?: string
+    name?: string
+    lastName?: string
+    birthDate?: string
+    weight?: number
+    height?: number
+  }) {
     const fallbackEmail = user.id === demoUser.id ? demoUser.email : `${user.id}@local.app`
     const fallbackName = user.id === demoUser.id ? demoUser.name : "Usuario"
     const fallbackLastName = user.id === demoUser.id ? demoUser.lastName : undefined
     const fallbackBirthDate = user.id === demoUser.id ? demoUser.birthDate : undefined
+    const fallbackWeight = user.id === demoUser.id ? demoUser.weight : undefined
+    const fallbackHeight = user.id === demoUser.id ? demoUser.height : undefined
 
     await this.prisma.user.upsert({
       where: { id: user.id },
@@ -853,6 +930,8 @@ export class PrismaRepository {
         name: user.name ?? fallbackName,
         lastName: user.lastName ?? fallbackLastName,
         birthDate: user.birthDate ? new Date(user.birthDate) : fallbackBirthDate ? new Date(fallbackBirthDate) : null,
+        weight: user.weight != null ? new Prisma.Decimal(user.weight) : fallbackWeight != null ? new Prisma.Decimal(fallbackWeight) : null,
+        height: user.height != null ? new Prisma.Decimal(user.height) : fallbackHeight != null ? new Prisma.Decimal(fallbackHeight) : null,
         createdAt: new Date(demoUser.createdAt),
       },
       update: {
@@ -860,6 +939,8 @@ export class PrismaRepository {
         name: user.name ?? fallbackName,
         lastName: user.lastName ?? fallbackLastName,
         birthDate: user.birthDate ? new Date(user.birthDate) : fallbackBirthDate ? new Date(fallbackBirthDate) : undefined,
+        weight: user.weight != null ? new Prisma.Decimal(user.weight) : fallbackWeight != null ? new Prisma.Decimal(fallbackWeight) : undefined,
+        height: user.height != null ? new Prisma.Decimal(user.height) : fallbackHeight != null ? new Prisma.Decimal(fallbackHeight) : undefined,
       },
     })
   }
