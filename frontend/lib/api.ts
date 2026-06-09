@@ -7,6 +7,8 @@ import type {
   HomeTodayDTO,
   PlanDTO,
   ProgressSeriesDTO,
+  UpdateUserProfileInputDTO,
+  UserProfileDTO,
   WorkoutSessionDTO,
   WorkoutSetInputDTO,
 } from "@my-progress/shared"
@@ -49,6 +51,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getProfile: () => request<UserProfileDTO>("/profile"),
+  updateProfile: (input: UpdateUserProfileInputDTO) =>
+    request<UserProfileDTO>("/profile", { method: "PUT", body: JSON.stringify(input) }),
   getHome: () => request<HomeTodayDTO>("/home/today"),
   getExercises: () => request<ExerciseDTO[]>("/exercises"),
   getPlans: () => request<PlanDTO[]>("/plans"),

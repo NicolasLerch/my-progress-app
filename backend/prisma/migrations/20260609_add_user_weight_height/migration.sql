@@ -1,0 +1,3 @@
+ALTER TABLE "User"
+ADD COLUMN "weight" DECIMAL(5, 2),
+ADD COLUMN "height" DECIMAL(5, 2);

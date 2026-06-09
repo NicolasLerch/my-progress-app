@@ -4,6 +4,7 @@ import {
   createWorkoutExerciseInputSchema,
   createWorkoutSessionInputSchema,
   updatePlanDayInputSchema,
+  updateUserProfileInputSchema,
   updateWorkoutSessionInputSchema,
   workoutSetInputSchema,
 } from "@my-progress/shared"
@@ -19,6 +20,17 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({ ok: true }))
 
   app.get("/exercises", async () => await repository.getExercises())
+
+  app.get("/profile", async (request) => await repository.getProfile(request.user))
+
+  app.put("/profile", async (request, reply) => {
+    const input = updateUserProfileInputSchema.parse(request.body)
+    const profile = await repository.updateProfile(request.user.id, input)
+    if (!profile) {
+      return reply.code(404).send({ message: "User not found." })
+    }
+    return profile
+  })
 
   app.get("/plans", async (request) => await repository.getPlans(request.user.id))
 

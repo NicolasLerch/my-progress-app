@@ -73,3 +73,8 @@ export const updateWorkoutSessionInputSchema = z.object({
   notes: z.string().max(500).optional(),
   status: workoutSessionStatusSchema.optional(),
 })
+
+export const updateUserProfileInputSchema = z.object({
+  weight: z.number().positive().max(500).optional(),
+  height: z.number().positive().max(300).optional(),
+})
