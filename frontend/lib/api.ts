@@ -16,6 +16,21 @@ import { supabase } from "@/lib/supabase"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
 
+function withSearchParams(path: string, params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") {
+      return
+    }
+
+    searchParams.set(key, String(value))
+  })
+
+  const query = searchParams.toString()
+  return query ? `${path}?${query}` : path
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   if (init?.body !== undefined && !headers.has("Content-Type")) {
@@ -55,7 +70,8 @@ export const api = {
   updateProfile: (input: UpdateUserProfileInputDTO) =>
     request<UserProfileDTO>("/profile", { method: "PUT", body: JSON.stringify(input) }),
   getHome: () => request<HomeTodayDTO>("/home/today"),
-  getExercises: () => request<ExerciseDTO[]>("/exercises"),
+  getExercises: (query?: string, limit?: number) =>
+    request<ExerciseDTO[]>(withSearchParams("/exercises", { query, limit })),
   getPlans: () => request<PlanDTO[]>("/plans"),
   getPlan: (planId: string) => request<PlanDTO>(`/plans/${planId}`),
   createPlan: (input: CreatePlanInputDTO) =>
@@ -88,7 +104,8 @@ export const api = {
     request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/complete`, { method: "POST" }),
   getHistory: () => request<HistoryItemDTO[]>("/history"),
   getHistorySession: (sessionId: string) => request<WorkoutSessionDTO>(`/history/${sessionId}`),
-  getProgressExercises: () => request<ExerciseDTO[]>("/progress/exercises"),
+  getProgressExercises: (query?: string, limit?: number) =>
+    request<ExerciseDTO[]>(withSearchParams("/progress/exercises", { query, limit })),
   getProgressSeries: (exerciseId: string) =>
     request<ProgressSeriesDTO>(`/progress/exercises/${exerciseId}`),
 }

@@ -34,7 +34,7 @@ export interface PlanExerciseDTO {
   exerciseId: string
   exerciseName: string
   targetSets: number
-  targetReps: number
+  targetReps: string
   restSeconds: number
   notes?: string
 }
@@ -80,7 +80,7 @@ export interface WorkoutExerciseDTO {
   exerciseName: string
   planExerciseId?: string
   targetSets: number
-  targetReps: number
+  targetReps: string
   restSeconds: number
   notes?: string
   sets: WorkoutSetDTO[]
@@ -195,7 +195,7 @@ export interface CreatePlanInputDTO {
       exerciseId: string
       exerciseName: string
       targetSets: number
-      targetReps: number
+      targetReps: string
       restSeconds: number
       notes?: string
     }>
