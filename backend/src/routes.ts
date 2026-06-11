@@ -8,9 +8,15 @@ import {
   updateWorkoutSessionInputSchema,
   workoutSetInputSchema,
 } from "@my-progress/shared"
+import { z } from "zod"
 import { prisma } from "./lib/prisma.js"
 import { requireUser } from "./plugins/auth.js"
 import { PrismaRepository } from "./repositories/prisma-repository.js"
+
+const exerciseSearchQuerySchema = z.object({
+  query: z.string().trim().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+})
 
 export async function registerRoutes(app: FastifyInstance) {
   const repository = new PrismaRepository(prisma)
@@ -19,7 +25,10 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/health", async () => ({ ok: true }))
 
-  app.get("/exercises", async () => await repository.getExercises())
+  app.get("/exercises", async (request) => {
+    const query = exerciseSearchQuerySchema.parse(request.query)
+    return repository.getExercises(query)
+  })
 
   app.get("/profile", async (request) => await repository.getProfile(request.user))
 
@@ -176,7 +185,10 @@ export async function registerRoutes(app: FastifyInstance) {
     return session
   })
 
-  app.get("/progress/exercises", async (request) => await repository.getProgressExercises(request.user.id))
+  app.get("/progress/exercises", async (request) => {
+    const query = exerciseSearchQuerySchema.parse(request.query)
+    return repository.getProgressExercises(request.user.id, query)
+  })
 
   app.get("/progress/exercises/:exerciseId", async (request, reply) => {
     const series = await repository.getProgressSeries(

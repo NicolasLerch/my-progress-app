@@ -15,8 +15,8 @@ export default function NewPlanPage() {
       description="Define dias, ejercicios y objetivos para tu rutina."
       submitLabel="Guardar plan"
       submittingLabel="Guardando plan..."
-      onSubmit={async (values, exercises) => {
-        const plan = await api.createPlan(buildPlanInput(values, exercises))
+      onSubmit={async (values) => {
+        const plan = await api.createPlan(buildPlanInput(values))
         toast({
           title: 'Plan creado con exito',
           description: 'El nuevo plan quedo listo y activo.',

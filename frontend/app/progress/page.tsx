@@ -3,36 +3,37 @@
 import { useEffect, useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import type { ExerciseDTO, ProgressSeriesDTO } from "@my-progress/shared"
+import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 import { formatShortDate } from "@/lib/format"
 
 export default function ProgressPage() {
-  const [exercises, setExercises] = useState<ExerciseDTO[]>([])
-  const [selectedId, setSelectedId] = useState("")
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseDTO | null>(null)
   const [series, setSeries] = useState<ProgressSeriesDTO | null>(null)
   const { isLoading, isReady, session } = useAuthReady()
 
   useEffect(() => {
     if (!isReady) return
-    api.getProgressExercises().then((items) => {
-      setExercises(items)
+    api.getProgressExercises("", 1).then((items) => {
       if (items[0]) {
-        setSelectedId(items[0].id)
+        setSelectedExercise(items[0])
       }
     }).catch(() => {})
   }, [isReady])
 
   useEffect(() => {
-    if (!isReady || !selectedId) return
-    api.getProgressSeries(selectedId).then(setSeries).catch(() => {})
-  }, [isReady, selectedId])
+    if (!isReady || !selectedExercise?.id) {
+      setSeries(null)
+      return
+    }
+    api.getProgressSeries(selectedExercise.id).then(setSeries).catch(() => {})
+  }, [isReady, selectedExercise?.id])
 
   useEffect(() => {
     if (!session) {
-      setExercises([])
-      setSelectedId("")
+      setSelectedExercise(null)
       setSeries(null)
     }
   }, [session])
@@ -53,17 +54,14 @@ export default function ProgressPage() {
         <p className="text-sm text-muted-foreground">Evolucion por ejercicio con peso y volumen.</p>
       </div>
 
-      <select
-        className="h-12 rounded-xl bg-card border border-border/50 px-3 text-sm"
-        value={selectedId}
-        onChange={(event) => setSelectedId(event.target.value)}
-      >
-        {exercises.map((exercise) => (
-          <option key={exercise.id} value={exercise.id}>
-            {exercise.name}
-          </option>
-        ))}
-      </select>
+      <ExerciseSearchSelect
+        value={selectedExercise?.id ?? ""}
+        selectedExercise={selectedExercise ?? undefined}
+        searchExercises={(query) => api.getProgressExercises(query, 20)}
+        onSelect={setSelectedExercise}
+        placeholder="Selecciona un ejercicio con historial"
+        emptyMessage="No hay ejercicios con historial para esa busqueda."
+      />
 
       <Card>
         <CardContent className="p-4">

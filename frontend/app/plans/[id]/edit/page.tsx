@@ -41,8 +41,8 @@ export default function EditPlanPage() {
       submitLabel="Guardar cambios"
       submittingLabel="Guardando cambios..."
       initialPlan={plan}
-      onSubmit={async (values, exercises) => {
-        const input = buildPlanInput(values, exercises, {
+      onSubmit={async (values) => {
+        const input = buildPlanInput(values, {
           status: plan.status,
           startDate: plan.startDate,
           endDate: plan.endDate,

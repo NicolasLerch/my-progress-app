@@ -1,15 +1,27 @@
 import type { WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 
 const DB_NAME = "my-progress-offline"
-const DB_VERSION = 1
+const DB_VERSION = 2
 const SESSION_STORE = "sessionSnapshots"
 const QUEUE_STORE = "pendingSetOps"
+const DRAFT_STORE = "trainingDrafts"
 
 interface PendingSetOperation {
   id: string
   sessionId: string
   exerciseId: string
   payload: WorkoutSetInputDTO
+}
+
+export interface TrainingDraftExerciseState {
+  expanded: boolean
+  weight: string
+  reps: string
+}
+
+export interface TrainingDraftSnapshot {
+  id: string
+  exercises: Record<string, TrainingDraftExerciseState>
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -25,6 +37,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!database.objectStoreNames.contains(QUEUE_STORE)) {
         database.createObjectStore(QUEUE_STORE, { keyPath: "id" })
+      }
+      if (!database.objectStoreNames.contains(DRAFT_STORE)) {
+        database.createObjectStore(DRAFT_STORE, { keyPath: "id" })
       }
     }
   })
@@ -132,5 +147,56 @@ export async function removeSetOperation(operationId: string) {
   }
   await withStore<void>(QUEUE_STORE, "readwrite", (store) => {
     store.delete(operationId)
+  })
+}
+
+export async function clearSessionSetOperations(sessionId: string) {
+  if (typeof indexedDB === "undefined") {
+    return
+  }
+
+  const operations = await listSetOperations(sessionId)
+  await withStore<void>(QUEUE_STORE, "readwrite", (store) => {
+    operations.forEach((operation) => {
+      store.delete(operation.id)
+    })
+  })
+}
+
+export async function saveTrainingDraft(snapshot: TrainingDraftSnapshot) {
+  if (typeof indexedDB === "undefined") {
+    return
+  }
+  await withStore<void>(DRAFT_STORE, "readwrite", (store) => {
+    store.put(snapshot)
+  })
+}
+
+export async function getTrainingDraft(sessionId: string) {
+  if (typeof indexedDB === "undefined") {
+    return undefined
+  }
+  const database = await openDatabase()
+  return new Promise<TrainingDraftSnapshot | undefined>((resolve, reject) => {
+    const transaction = database.transaction(DRAFT_STORE, "readonly")
+    const request = transaction.objectStore(DRAFT_STORE).get(sessionId)
+
+    request.onsuccess = () => {
+      database.close()
+      resolve(request.result as TrainingDraftSnapshot | undefined)
+    }
+    request.onerror = () => {
+      database.close()
+      reject(request.error)
+    }
+  })
+}
+
+export async function deleteTrainingDraft(sessionId: string) {
+  if (typeof indexedDB === "undefined") {
+    return
+  }
+  await withStore<void>(DRAFT_STORE, "readwrite", (store) => {
+    store.delete(sessionId)
   })
 }

@@ -6,7 +6,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shared'
 import { api } from '@/lib/api'
 import { useAuthReady } from '@/hooks/use-auth-ready'
-import { toast } from '@/hooks/use-toast'
+import { ExerciseSearchSelect } from '@/components/exercise-search-select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea'
 type ExerciseForm = {
   id: string
   exerciseId: string
+  exerciseName: string
+  muscleGroup: string
   targetSets: string
   targetReps: string
   restSeconds: string
@@ -40,17 +42,19 @@ type PlanFormProps = {
   submitLabel: string
   submittingLabel: string
   initialPlan?: PlanDTO
-  onSubmit: (values: PlanFormValues, exercises: ExerciseDTO[]) => Promise<void>
+  onSubmit: (values: PlanFormValues) => Promise<void>
 }
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function createExerciseForm(defaultExerciseId = ''): ExerciseForm {
+function createExerciseForm(defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 'muscleGroup'>): ExerciseForm {
   return {
     id: createId('exercise'),
-    exerciseId: defaultExerciseId,
+    exerciseId: defaultExercise?.id ?? '',
+    exerciseName: defaultExercise?.name ?? '',
+    muscleGroup: defaultExercise?.muscleGroup ?? '',
     targetSets: '4',
     targetReps: '8',
     restSeconds: '90',
@@ -58,11 +62,11 @@ function createExerciseForm(defaultExerciseId = ''): ExerciseForm {
   }
 }
 
-function createDayForm(index: number, defaultExerciseId = ''): DayForm {
+function createDayForm(index: number, defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 'muscleGroup'>): DayForm {
   return {
     id: createId('day'),
     name: `Dia ${index + 1}`,
-    exercises: [createExerciseForm(defaultExerciseId)],
+    exercises: [createExerciseForm(defaultExercise)],
   }
 }
 
@@ -75,6 +79,8 @@ function mapPlanToForm(plan: PlanDTO): PlanFormValues {
       exercises: day.exercises.map((exercise) => ({
         id: exercise.id,
         exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+        muscleGroup: '',
         targetSets: String(exercise.targetSets),
         targetReps: String(exercise.targetReps),
         restSeconds: String(exercise.restSeconds),
@@ -94,9 +100,13 @@ export function parseNonNegativeInteger(value: string) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
+export function parseTargetReps(value: string) {
+  const normalized = value.trim()
+  return normalized.length > 0 && normalized.length <= 30 ? normalized : null
+}
+
 export function buildPlanInput(
   values: PlanFormValues,
-  exercises: ExerciseDTO[],
   options?: {
     status?: PlanDTO['status']
     startDate?: string
@@ -115,18 +125,14 @@ export function buildPlanInput(
     days: values.days.map((day, dayIndex) => ({
       name: day.name.trim(),
       order: dayIndex + 1,
-      exercises: day.exercises.map((exercise) => {
-        const selectedExercise = exercises.find((item) => item.id === exercise.exerciseId)
-
-        return {
-          exerciseId: exercise.exerciseId,
-          exerciseName: selectedExercise?.name ?? '',
-          targetSets: parsePositiveInteger(exercise.targetSets) ?? 0,
-          targetReps: parsePositiveInteger(exercise.targetReps) ?? 0,
-          restSeconds: parseNonNegativeInteger(exercise.restSeconds) ?? 0,
-          notes: exercise.notes.trim() || undefined,
-        }
-      }),
+      exercises: day.exercises.map((exercise) => ({
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName.trim(),
+        targetSets: parsePositiveInteger(exercise.targetSets) ?? 0,
+        targetReps: parseTargetReps(exercise.targetReps) ?? '',
+        restSeconds: parseNonNegativeInteger(exercise.restSeconds) ?? 0,
+        notes: exercise.notes.trim() || undefined,
+      })),
     })),
   }
 }
@@ -140,12 +146,10 @@ export function PlanForm({
   initialPlan,
   onSubmit,
 }: PlanFormProps) {
-  const [exercises, setExercises] = useState<ExerciseDTO[]>([])
-  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [name, setName] = useState(initialPlan?.name ?? 'Nuevo plan')
   const [days, setDays] = useState<DayForm[]>(initialPlan ? mapPlanToForm(initialPlan).days : [createDayForm(0)])
   const [saving, setSaving] = useState(false)
-  const { isLoading, isReady, session } = useAuthReady()
+  const { isLoading } = useAuthReady()
 
   useEffect(() => {
     if (!initialPlan) {
@@ -156,52 +160,6 @@ export function PlanForm({
     setName(nextForm.name)
     setDays(nextForm.days)
   }, [initialPlan])
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    api.getExercises()
-      .then((items) => {
-        if (items.length === 0) {
-          const message = 'No hay ejercicios disponibles para crear un plan.'
-          setCatalogError(message)
-          toast({
-            variant: 'destructive',
-            title: 'Catalogo vacio',
-            description: message,
-          })
-          return
-        }
-
-        setExercises(items)
-        setDays((currentDays) =>
-          currentDays.map((day) => ({
-            ...day,
-            exercises: day.exercises.map((exercise) =>
-              exercise.exerciseId ? exercise : { ...exercise, exerciseId: items[0]?.id ?? '' },
-            ),
-          })),
-        )
-      })
-      .catch((cause: Error) => {
-        const message = cause.message || 'No se pudo cargar el catalogo de ejercicios.'
-        setCatalogError(message)
-        toast({
-          variant: 'destructive',
-          title: 'Error al cargar ejercicios',
-          description: message,
-        })
-      })
-  }, [isReady])
-
-  useEffect(() => {
-    if (!session) {
-      setExercises([])
-      setCatalogError(null)
-    }
-  }, [session])
 
   const validationErrors = useMemo(() => {
     const errors: string[] = []
@@ -224,7 +182,7 @@ export function PlanForm({
       }
 
       day.exercises.forEach((exercise, exerciseIndex) => {
-        if (exercises.length > 0 && !exercise.exerciseId) {
+        if (!exercise.exerciseId || exercise.exerciseName.trim().length < 2) {
           errors.push(`Falta seleccionar el ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1}.`)
         }
 
@@ -232,8 +190,8 @@ export function PlanForm({
           errors.push(`Las series del ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1} deben ser mayores a 0.`)
         }
 
-        if (parsePositiveInteger(exercise.targetReps) === null) {
-          errors.push(`Las repeticiones del ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1} deben ser mayores a 0.`)
+        if (parseTargetReps(exercise.targetReps) === null) {
+          errors.push(`Las repeticiones del ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1} no pueden quedar vacias.`)
         }
 
         if (parseNonNegativeInteger(exercise.restSeconds) === null) {
@@ -243,16 +201,16 @@ export function PlanForm({
     })
 
     return errors
-  }, [days, exercises.length, name])
+  }, [days, name])
 
-  const canSave = !saving && !catalogError && exercises.length > 0 && validationErrors.length === 0
+  const canSave = !saving && validationErrors.length === 0
 
   function updateDay(dayId: string, updater: (day: DayForm) => DayForm) {
     setDays((currentDays) => currentDays.map((day) => (day.id === dayId ? updater(day) : day)))
   }
 
   function addDay() {
-    setDays((currentDays) => [...currentDays, createDayForm(currentDays.length, exercises[0]?.id ?? '')])
+    setDays((currentDays) => [...currentDays, createDayForm(currentDays.length)])
   }
 
   function removeDay(dayId: string) {
@@ -276,7 +234,7 @@ export function PlanForm({
   function addExercise(dayId: string) {
     updateDay(dayId, (day) => ({
       ...day,
-      exercises: [...day.exercises, createExerciseForm(exercises[0]?.id ?? '')],
+      exercises: [...day.exercises, createExerciseForm()],
     }))
   }
 
@@ -309,7 +267,7 @@ export function PlanForm({
     setSaving(true)
 
     try {
-      await onSubmit({ name, days }, exercises)
+      await onSubmit({ name, days })
     } finally {
       setSaving(false)
     }
@@ -348,18 +306,6 @@ export function PlanForm({
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Verificando sesion...</p>
-          </CardContent>
-        </Card>
-      ) : catalogError ? (
-        <Card className="border-destructive/40">
-          <CardContent className="p-4">
-            <p className="text-sm text-destructive">{catalogError}</p>
-          </CardContent>
-        </Card>
-      ) : exercises.length === 0 ? (
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Cargando catalogo de ejercicios...</p>
           </CardContent>
         </Card>
       ) : null}
@@ -453,25 +399,28 @@ export function PlanForm({
 
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col gap-2">
-                        <Label htmlFor={`exercise-${exercise.id}`}>Ejercicio</Label>
-                        <select
-                          id={`exercise-${exercise.id}`}
+                        <Label>Ejercicio</Label>
+                        <ExerciseSearchSelect
                           value={exercise.exerciseId}
-                          onChange={(event) =>
+                          selectedExercise={
+                            exercise.exerciseId
+                              ? {
+                                  id: exercise.exerciseId,
+                                  name: exercise.exerciseName,
+                                  muscleGroup: exercise.muscleGroup,
+                                }
+                              : undefined
+                          }
+                          searchExercises={(query) => api.getExercises(query, 20)}
+                          onSelect={(selectedExercise) =>
                             updateExercise(day.id, exercise.id, (currentExercise) => ({
                               ...currentExercise,
-                              exerciseId: event.target.value,
+                              exerciseId: selectedExercise.id,
+                              exerciseName: selectedExercise.name,
+                              muscleGroup: selectedExercise.muscleGroup,
                             }))
                           }
-                          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                          <option value="">Selecciona un ejercicio</option>
-                          {exercises.map((item) => (
-                            <option value={item.id} key={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
 
                       <div className="grid grid-cols-3 gap-3">
@@ -494,8 +443,7 @@ export function PlanForm({
                           <Label htmlFor={`reps-${exercise.id}`}>Reps</Label>
                           <Input
                             id={`reps-${exercise.id}`}
-                            type="number"
-                            min="1"
+                            type="text"
                             value={exercise.targetReps}
                             onChange={(event) =>
                               updateExercise(day.id, exercise.id, (currentExercise) => ({
@@ -503,6 +451,7 @@ export function PlanForm({
                                 targetReps: event.target.value,
                               }))
                             }
+                            placeholder="8 a 12"
                           />
                         </div>
                         <div className="flex flex-col gap-2">
@@ -546,7 +495,6 @@ export function PlanForm({
                 variant="outline"
                 className="gap-2"
                 onClick={() => addExercise(day.id)}
-                disabled={exercises.length === 0}
               >
                 <Plus className="w-4 h-4" />
                 Agregar ejercicio
