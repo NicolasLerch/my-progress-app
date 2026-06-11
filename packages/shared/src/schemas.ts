@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const planStatusSchema = z.enum(["draft", "active", "archived", "completed"])
 export const workoutSessionStatusSchema = z.enum(["in_progress", "completed", "abandoned"])
+const targetRepsSchema = z.string().trim().min(1).max(30)
 
 export const workoutSetInputSchema = z.object({
   id: z.string().optional(),
@@ -44,7 +45,7 @@ export const createPlanInputSchema = z.object({
           exerciseId: z.string().min(1),
           exerciseName: z.string().min(2),
           targetSets: z.number().int().positive(),
-          targetReps: z.number().int().positive(),
+          targetReps: targetRepsSchema,
           restSeconds: z.number().int().nonnegative(),
           notes: z.string().max(300).optional(),
         }),
@@ -62,7 +63,7 @@ export const updatePlanDayInputSchema = z.object({
       exerciseId: z.string().min(1),
       exerciseName: z.string().min(2),
       targetSets: z.number().int().positive(),
-      targetReps: z.number().int().positive(),
+      targetReps: targetRepsSchema,
       restSeconds: z.number().int().nonnegative(),
       notes: z.string().max(300).optional(),
     }),

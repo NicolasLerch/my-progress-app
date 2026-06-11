@@ -46,6 +46,10 @@ const workoutSessionInclude = {
 
 type PlanWithRelations = Prisma.PlanGetPayload<{ include: typeof planInclude }>
 type WorkoutSessionWithRelations = Prisma.WorkoutSessionGetPayload<{ include: typeof workoutSessionInclude }>
+type ExerciseSearchOptions = {
+  query?: string
+  limit?: number
+}
 
 function toIsoString(value: Date | null | undefined) {
   return value?.toISOString()
@@ -167,12 +171,38 @@ function minutesBetween(startedAt: Date, completedAt: Date) {
   return Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 60000))
 }
 
+function buildExerciseSearchWhere(query?: string): Prisma.ExerciseWhereInput | undefined {
+  const search = query?.trim()
+  if (!search) {
+    return undefined
+  }
+
+  return {
+    OR: [
+      {
+        name: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        muscleGroup: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+    ],
+  }
+}
+
 export class PrismaRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async getExercises(): Promise<ExerciseDTO[]> {
+  async getExercises(options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
     const exercises = await this.prisma.exercise.findMany({
+      where: buildExerciseSearchWhere(options.query),
       orderBy: [{ muscleGroup: "asc" }, { name: "asc" }],
+      take: options.limit ?? 20,
     })
 
     return exercises.map((exercise) => ({
@@ -657,7 +687,7 @@ export class PrismaRepository {
           exerciseId,
           exerciseName: exercise.name,
           targetSets: 0,
-          targetReps: 0,
+          targetReps: "",
           restSeconds: 0,
         },
       })
@@ -804,26 +834,26 @@ export class PrismaRepository {
     })
   }
 
-  async getProgressExercises(userId: string): Promise<ExerciseDTO[]> {
-    const rows = await this.prisma.workoutExercise.findMany({
+  async getProgressExercises(userId: string, options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
+    const exercises = await this.prisma.exercise.findMany({
       where: {
-        workoutSession: {
-          userId,
+        ...buildExerciseSearchWhere(options.query),
+        workoutExercises: {
+          some: {
+            workoutSession: {
+              userId,
+            },
+          },
         },
       },
-      distinct: ["exerciseId"],
-      include: {
-        exercise: true,
-      },
-      orderBy: {
-        exerciseId: "asc",
-      },
+      orderBy: [{ muscleGroup: "asc" }, { name: "asc" }],
+      take: options.limit ?? 20,
     })
 
-    return rows.map((row) => ({
-      id: row.exercise.id,
-      name: row.exercise.name,
-      muscleGroup: row.exercise.muscleGroup,
+    return exercises.map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      muscleGroup: exercise.muscleGroup,
     }))
   }
 

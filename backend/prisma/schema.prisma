@@ -77,7 +77,7 @@ model PlanExercise {
   planDayId   String
   exerciseId  String
   targetSets  Int
-  targetReps  Int
+  targetReps  String
   restSeconds Int
   notes       String?
   planDay     PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
@@ -112,7 +112,7 @@ model WorkoutExercise {
   exerciseName      String
   planExerciseId    String?
   targetSets        Int
-  targetReps        Int
+  targetReps        String
   restSeconds       Int
   notes             String?
   workoutSession    WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)

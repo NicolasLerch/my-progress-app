@@ -2,15 +2,29 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import type { ExerciseDTO, HomeTodayDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  History,
+  Play,
+} from "lucide-react"
+import type { ExerciseDTO, HomeTodayDTO, WorkoutExerciseDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
+import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { api } from "@/lib/api"
 import {
+  clearSessionSetOperations,
   deleteSessionSnapshot,
+  deleteTrainingDraft,
   getSessionSnapshot,
+  getTrainingDraft,
   listSetOperations,
   queueSetOperation,
   removeSetOperation,
   saveSessionSnapshot,
+  saveTrainingDraft,
+  type TrainingDraftExerciseState,
 } from "@/lib/offline-workouts"
 import {
   AlertDialog,
@@ -35,9 +49,44 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "@/hooks/use-toast"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { cn } from "@/lib/utils"
+
+type ExerciseUiState = TrainingDraftExerciseState
+type PreviousPerformance = {
+  weight: number
+  reps: number
+  date: string
+}
 
 function isPlanlessSession(session: WorkoutSessionDTO | null) {
   return Boolean(session && !session.planId)
+}
+
+function formatElapsedTime(startedAt: string, now: number) {
+  const totalSeconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
+function getExerciseCompletion(exercise: WorkoutExerciseDTO) {
+  if (exercise.targetSets > 0) {
+    return exercise.sets.length >= exercise.targetSets
+  }
+
+  return exercise.sets.length > 0
+}
+
+function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
+  return session.exercises.reduce<Record<string, ExerciseUiState>>((accumulator, exercise, index) => {
+    accumulator[exercise.exerciseId] = {
+      expanded: index === 0,
+      weight: exercise.sets.at(-1)?.weight?.toString() ?? "",
+      reps: "",
+    }
+
+    return accumulator
+  }, {})
 }
 
 export default function TrainingCurrentPage() {
@@ -45,8 +94,7 @@ export default function TrainingCurrentPage() {
   const { isLoading, isReady, session: authSession } = useAuthReady()
   const [home, setHome] = useState<HomeTodayDTO | null>(null)
   const [session, setSession] = useState<WorkoutSessionDTO | null>(null)
-  const [exercises, setExercises] = useState<ExerciseDTO[]>([])
-  const [selectedExerciseId, setSelectedExerciseId] = useState("")
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseDTO | null>(null)
   const [selectedPlanDayId, setSelectedPlanDayId] = useState("")
   const [pending, setPending] = useState(false)
   const [creatingExercise, setCreatingExercise] = useState(false)
@@ -56,6 +104,8 @@ export default function TrainingCurrentPage() {
   const [completedDialogOpen, setCompletedDialogOpen] = useState(false)
   const [completingWorkout, setCompletingWorkout] = useState(false)
   const [cancellingWorkout, setCancellingWorkout] = useState(false)
+  const [exerciseUiState, setExerciseUiState] = useState<Record<string, ExerciseUiState>>({})
+  const [clockNow, setClockNow] = useState(() => Date.now())
 
   useEffect(() => {
     if (!isReady) return
@@ -68,27 +118,131 @@ export default function TrainingCurrentPage() {
         setSession(snapshot ?? currentSession)
       }
     }).catch(() => {})
-
-    api.getExercises().then((items) => {
-      setExercises(items)
-      setSelectedExerciseId(items[0]?.id ?? "")
-    }).catch(() => {})
   }, [isReady])
 
   useEffect(() => {
     if (!authSession) {
       setHome(null)
       setSession(null)
-      setExercises([])
-      setSelectedExerciseId("")
+      setSelectedExercise(null)
       setSelectedPlanDayId("")
+      setExerciseUiState({})
     }
   }, [authSession])
+
+  useEffect(() => {
+    if (!session) {
+      setExerciseUiState({})
+      return
+    }
+
+    const currentSession = session
+    let cancelled = false
+
+    async function loadDraft() {
+      const baseState = buildInitialExerciseUiState(currentSession)
+      const draft = await getTrainingDraft(currentSession.id)
+      if (cancelled) {
+        return
+      }
+
+      setExerciseUiState(
+        draft
+          ? Object.entries(baseState).reduce<Record<string, ExerciseUiState>>((accumulator, [exerciseId, state]) => {
+              accumulator[exerciseId] = {
+                expanded: draft.exercises[exerciseId]?.expanded ?? state.expanded,
+                weight: draft.exercises[exerciseId]?.weight ?? state.weight,
+                reps: draft.exercises[exerciseId]?.reps ?? state.reps,
+              }
+              return accumulator
+            }, {})
+          : baseState,
+      )
+    }
+
+    void loadDraft()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session?.id])
 
   useEffect(() => {
     if (!session) return
     void flushQueue(session.id)
   }, [session?.id])
+
+  useEffect(() => {
+    if (!session) return
+
+    const intervalId = window.setInterval(() => {
+      setClockNow(Date.now())
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [session?.id])
+
+  const completedExercises = useMemo(
+    () => session?.exercises.filter(getExerciseCompletion).length ?? 0,
+    [session],
+  )
+
+  const totalCompletedSets = useMemo(
+    () => session?.exercises.reduce((count, exercise) => count + exercise.sets.length, 0) ?? 0,
+    [session],
+  )
+
+  const previousPerformanceByExercise = useMemo(() => {
+    if (!home) {
+      return {}
+    }
+
+    return home.recentSessions
+      .filter((item) => item.status === "completed")
+      .reduce<Record<string, PreviousPerformance>>((accumulator, workoutSession) => {
+        workoutSession.exercises.forEach((exercise) => {
+          if (accumulator[exercise.exerciseId] || exercise.sets.length === 0) {
+            return
+          }
+
+          const lastSet = exercise.sets.at(-1)
+          if (!lastSet) {
+            return
+          }
+
+          accumulator[exercise.exerciseId] = {
+            weight: lastSet.weight,
+            reps: lastSet.reps,
+            date: workoutSession.date,
+          }
+        })
+
+        return accumulator
+      }, {})
+  }, [home])
+
+  async function persistExerciseUiState(nextState: Record<string, ExerciseUiState>) {
+    if (!session) {
+      return
+    }
+
+    await saveTrainingDraft({
+      id: session.id,
+      exercises: nextState,
+    })
+  }
+
+  function updateExerciseUi(exerciseId: string, updater: (state: ExerciseUiState) => ExerciseUiState) {
+    setExerciseUiState((currentState) => {
+      const nextState = {
+        ...currentState,
+        [exerciseId]: updater(currentState[exerciseId] ?? { expanded: false, weight: "", reps: "" }),
+      }
+
+      void persistExerciseUiState(nextState)
+      return nextState
+    })
+  }
 
   async function startWorkout(planDayId?: string) {
     if (!home?.activePlan) {
@@ -116,16 +270,17 @@ export default function TrainingCurrentPage() {
   }
 
   async function addExerciseToSession() {
-    if (!session || !selectedExerciseId) {
+    if (!session || !selectedExercise) {
       return
     }
 
     setCreatingExercise(true)
 
     try {
-      const updated = await api.addWorkoutExercise(session.id, { exerciseId: selectedExerciseId })
+      const updated = await api.addWorkoutExercise(session.id, { exerciseId: selectedExercise.id })
       await saveSessionSnapshot(updated)
       setSession(updated)
+      setSelectedExercise(null)
     } catch (cause) {
       toast({
         variant: "destructive",
@@ -150,40 +305,64 @@ export default function TrainingCurrentPage() {
     }
   }
 
-  async function saveSet(exerciseId: string, setNumber: number, weight: number, reps: number) {
+  async function saveSet(exerciseId: string) {
     if (!session) return
+
+    const draft = exerciseUiState[exerciseId]
+    const exercise = session.exercises.find((item) => item.exerciseId === exerciseId)
+
+    if (!draft || !exercise || !draft.weight || !draft.reps) {
+      return
+    }
+
+    const setNumber = exercise.sets.length + 1
     const payload: WorkoutSetInputDTO = {
       setNumber,
-      weight,
-      reps,
+      weight: Number(draft.weight),
+      reps: Number(draft.reps),
       updatedAt: new Date().toISOString(),
     }
 
     const nextSession: WorkoutSessionDTO = {
       ...session,
-      exercises: session.exercises.map((exercise) =>
-        exercise.exerciseId === exerciseId
+      exercises: session.exercises.map((item) =>
+        item.exerciseId === exerciseId
           ? {
-              ...exercise,
+              ...item,
               sets: [
-                ...exercise.sets.filter((item) => item.setNumber !== setNumber),
+                ...item.sets,
                 {
-                  id: `${exercise.id}-${setNumber}`,
-                  workoutExerciseId: exercise.id,
+                  id: `${item.id}-${setNumber}`,
+                  workoutExerciseId: item.id,
                   setNumber,
-                  weight,
-                  reps,
+                  weight: payload.weight,
+                  reps: payload.reps,
                   createdAt: payload.updatedAt,
                   updatedAt: payload.updatedAt,
                 },
-              ].sort((a, b) => a.setNumber - b.setNumber),
+              ],
             }
-          : exercise,
+          : item,
       ),
     }
 
+    const nextExerciseState = {
+      ...exerciseUiState,
+      [exerciseId]: {
+        ...draft,
+        expanded: true,
+        weight: draft.weight,
+        reps: "",
+      },
+    }
+
     setSession(nextSession)
+    setExerciseUiState(nextExerciseState)
     await saveSessionSnapshot(nextSession)
+    await saveTrainingDraft({
+      id: session.id,
+      exercises: nextExerciseState,
+    })
     await queueSetOperation(session.id, exerciseId, payload)
     setPending(true)
 
@@ -209,6 +388,8 @@ export default function TrainingCurrentPage() {
       setCompletedSessionId(completed.id)
       setCompletedDialogOpen(true)
       await deleteSessionSnapshot(session.id)
+      await deleteTrainingDraft(session.id)
+      await clearSessionSetOperations(session.id)
       setConfirmCompleteOpen(false)
     } catch (cause) {
       toast({
@@ -228,6 +409,8 @@ export default function TrainingCurrentPage() {
     try {
       await api.updateWorkoutSession(session.id, { status: "abandoned" })
       await deleteSessionSnapshot(session.id)
+      await deleteTrainingDraft(session.id)
+      await clearSessionSetOperations(session.id)
       setConfirmCancelOpen(false)
       router.push("/")
     } catch (cause) {
@@ -240,11 +423,6 @@ export default function TrainingCurrentPage() {
       setCancellingWorkout(false)
     }
   }
-
-  const totalCompletedSets = useMemo(
-    () => session?.exercises.reduce((count, exercise) => count + exercise.sets.length, 0) ?? 0,
-    [session],
-  )
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
@@ -306,37 +484,67 @@ export default function TrainingCurrentPage() {
   return (
     <>
       <div className="flex flex-col gap-4 pb-4">
-        <div>
-          <h1 className="text-xl font-bold">{session.dayName}</h1>
-          <p className="text-sm text-muted-foreground">
-            {session.planName} · {totalCompletedSets} series guardadas {pending ? "· sincronizando..." : ""}
-          </p>
+        <div className="rounded-3xl border border-primary/20 bg-linear-to-br from-primary/12 via-card to-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary/80">Sesion en curso</p>
+              <h1 className="mt-1 text-2xl font-bold">{session.dayName}</h1>
+              <p className="text-sm text-muted-foreground">
+                {session.planName} · {totalCompletedSets} series guardadas {pending ? "· sincronizando..." : ""}
+              </p>
+            </div>
+            <div className="rounded-full border border-primary/20 bg-background/80 px-3 py-1.5 text-sm font-semibold text-primary">
+              {formatElapsedTime(session.startedAt, clockNow)}
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${session.exercises.length === 0 ? 0 : (completedExercises / session.exercises.length) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-muted-foreground">
+              {completedExercises}/{session.exercises.length}
+            </span>
+          </div>
         </div>
 
         {session.exercises.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center">
               <p className="text-sm font-medium">Todavia no agregaste ejercicios</p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Elige un ejercicio para empezar a registrar las series reales de hoy.
               </p>
             </CardContent>
           </Card>
         ) : (
-          session.exercises.map((exercise) => (
-            <ExerciseCard
-              key={exercise.id}
-              session={session}
-              exerciseId={exercise.exerciseId}
-              title={exercise.exerciseName}
-              target={
-                exercise.targetSets > 0 || exercise.targetReps > 0
-                  ? `${exercise.targetSets} x ${exercise.targetReps}`
-                  : undefined
-              }
-              onSave={saveSet}
-            />
-          ))
+          <div className="flex flex-col gap-3">
+            {session.exercises.map((exercise, exerciseIndex) => (
+              <ExerciseCard
+                key={exercise.id}
+                exercise={exercise}
+                exerciseIndex={exerciseIndex}
+                state={exerciseUiState[exercise.exerciseId] ?? { expanded: exerciseIndex === 0, weight: "", reps: "" }}
+                previousPerformance={previousPerformanceByExercise[exercise.exerciseId]}
+                onToggleExpand={() =>
+                  updateExerciseUi(exercise.exerciseId, (current) => ({
+                    ...current,
+                    expanded: !current.expanded,
+                  }))
+                }
+                onDraftChange={(field, value) =>
+                  updateExerciseUi(exercise.exerciseId, (current) => ({
+                    ...current,
+                    [field]: value,
+                  }))
+                }
+                onSave={() => saveSet(exercise.exerciseId)}
+              />
+            ))}
+          </div>
         )}
 
         {planless && (
@@ -347,18 +555,15 @@ export default function TrainingCurrentPage() {
                 <p className="text-xs text-muted-foreground">Suma ejercicios a esta sesion libre antes o durante el entrenamiento.</p>
               </div>
               <div className="flex gap-3">
-                <select
-                  className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                  value={selectedExerciseId}
-                  onChange={(event) => setSelectedExerciseId(event.target.value)}
-                >
-                  {exercises.map((exercise) => (
-                    <option value={exercise.id} key={exercise.id}>
-                      {exercise.name}
-                    </option>
-                  ))}
-                </select>
-                <Button onClick={addExerciseToSession} disabled={!selectedExerciseId || creatingExercise}>
+                <div className="flex-1">
+                  <ExerciseSearchSelect
+                    value={selectedExercise?.id ?? ""}
+                    selectedExercise={selectedExercise ?? undefined}
+                    searchExercises={(query) => api.getExercises(query, 20)}
+                    onSelect={setSelectedExercise}
+                  />
+                </div>
+                <Button onClick={addExerciseToSession} disabled={!selectedExercise || creatingExercise}>
                   {creatingExercise ? "Agregando..." : "Agregar"}
                 </Button>
               </div>
@@ -366,7 +571,7 @@ export default function TrainingCurrentPage() {
           </Card>
         )}
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 safe-bottom">
           <Button onClick={() => setConfirmCompleteOpen(true)} disabled={session.exercises.length === 0 || completingWorkout}>
             Finalizar entrenamiento
           </Button>
@@ -375,7 +580,7 @@ export default function TrainingCurrentPage() {
             onClick={() => router.push("/")}
             disabled={completingWorkout || cancellingWorkout}
           >
-            Suspender sesion
+            Salir y continuar luego
           </Button>
           <Button
             variant="destructive"
@@ -392,7 +597,7 @@ export default function TrainingCurrentPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Finalizar entrenamiento</AlertDialogTitle>
             <AlertDialogDescription>
-              Se cerrara la sesion actual y se guardara como completada. Luego podras ver el resumen del dia.
+              Se cerrara la sesion actual, se limpiara el cache local de esta sesion y podras ver el resumen del dia.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -409,7 +614,7 @@ export default function TrainingCurrentPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar sesion</AlertDialogTitle>
             <AlertDialogDescription>
-              La sesion actual se marcara como abandonada y dejara de aparecer como entrenamiento en curso. Esta accion no finaliza el entrenamiento.
+              Esta accion descarta la sesion y borra su cache local. Si quieres seguir luego, usa "Salir y continuar luego".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -430,7 +635,7 @@ export default function TrainingCurrentPage() {
           <DialogHeader>
             <DialogTitle>Entrenamiento finalizado</DialogTitle>
             <DialogDescription>
-              La sesion se guardo correctamente. Ya puedes ver el resumen del dia.
+              La sesion se guardo correctamente y el cache local de esta sesion fue eliminado.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -460,57 +665,158 @@ export default function TrainingCurrentPage() {
 }
 
 function ExerciseCard({
-  session,
-  exerciseId,
-  title,
-  target,
+  exercise,
+  exerciseIndex,
+  state,
+  previousPerformance,
+  onToggleExpand,
+  onDraftChange,
   onSave,
 }: {
-  session: WorkoutSessionDTO
-  exerciseId: string
-  title: string
-  target?: string
-  onSave: (exerciseId: string, setNumber: number, weight: number, reps: number) => Promise<void>
+  exercise: WorkoutExerciseDTO
+  exerciseIndex: number
+  state: ExerciseUiState
+  previousPerformance?: PreviousPerformance
+  onToggleExpand: () => void
+  onDraftChange: (field: "weight" | "reps", value: string) => void
+  onSave: () => Promise<void>
 }) {
-  const exercise = session.exercises.find((item) => item.exerciseId === exerciseId)
-  const nextSetNumber = (exercise?.sets.length ?? 0) + 1
-  const [weight, setWeight] = useState("")
-  const [reps, setReps] = useState("")
-
-  if (!exercise) return null
+  const completed = getExerciseCompletion(exercise)
+  const displayRowCount = Math.max(exercise.targetSets, exercise.sets.length + 1)
 
   return (
-    <Card>
-      <CardContent className="p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">{title}</h2>
-            <p className="text-xs text-muted-foreground">{target ?? "Sin objetivo predefinido"}</p>
-          </div>
-          <span className="text-xs text-primary">Serie {nextSetNumber}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input type="number" placeholder="Peso" value={weight} onChange={(event) => setWeight(event.target.value)} />
-          <Input type="number" placeholder="Reps" value={reps} onChange={(event) => setReps(event.target.value)} />
-        </div>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            await onSave(exerciseId, nextSetNumber, Number(weight), Number(reps))
-            setWeight("")
-            setReps("")
-          }}
-          disabled={!weight || !reps}
+    <Card
+      className={cn(
+        "overflow-hidden border-border/60 bg-card transition-all duration-200",
+        completed && "border-primary/30 bg-primary/5",
+      )}
+    >
+      <CardContent className="p-0">
+        <button
+          onClick={onToggleExpand}
+          className="flex w-full items-center gap-3 p-4 text-left"
         >
-          Guardar serie
-        </Button>
-        <div className="flex flex-col gap-2">
-          {exercise.sets.map((set) => (
-            <div key={set.id} className="rounded-xl bg-secondary/60 px-3 py-2 text-sm">
-              Serie {set.setNumber}: {set.weight}kg x {set.reps}
+          <div
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+              completed ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
+            )}
+          >
+            {completed ? <Check className="size-4" /> : exerciseIndex + 1}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className={cn("font-medium", completed && "text-primary")}>{exercise.exerciseName}</p>
+            <p className="text-xs text-muted-foreground">
+              {exercise.targetSets > 0 || exercise.targetReps.trim().length > 0
+                ? `${exercise.targetSets} series x ${exercise.targetReps} reps · ${exercise.restSeconds}s descanso`
+                : "Sin objetivo predefinido"}
+            </p>
+          </div>
+
+          {state.expanded ? (
+            <ChevronUp className="size-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="size-5 text-muted-foreground" />
+          )}
+        </button>
+
+        {state.expanded ? (
+          <div className="border-t border-border/50 px-4 pb-4">
+            {previousPerformance ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                <History className="size-3.5" />
+                <span>
+                  Ultimo: <span className="font-medium text-foreground">{previousPerformance.weight}kg x {previousPerformance.reps}</span>
+                </span>
+              </div>
+            ) : null}
+
+            <div className="mt-2 flex flex-col gap-2">
+              <div className="grid grid-cols-[44px_1fr_1fr_48px] gap-2 px-1 text-xs font-medium text-muted-foreground">
+                <span>Serie</span>
+                <span>Peso</span>
+                <span>Reps</span>
+                <span />
+              </div>
+
+              {Array.from({ length: displayRowCount }, (_, index) => {
+                const setNumber = index + 1
+                const savedSet = exercise.sets[index]
+                const isEditableRow = !savedSet && setNumber === exercise.sets.length + 1
+
+                return (
+                  <div
+                    key={setNumber}
+                    className={cn(
+                      "grid grid-cols-[44px_1fr_1fr_48px] items-center gap-2",
+                      savedSet && "opacity-70",
+                    )}
+                  >
+                    <div className="flex items-center justify-center">
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium",
+                          savedSet ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
+                        )}
+                      >
+                        {setNumber}
+                      </span>
+                    </div>
+
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder={exercise.sets.at(-1)?.weight?.toString() ?? "0"}
+                      value={savedSet ? String(savedSet.weight) : isEditableRow ? state.weight : ""}
+                      onChange={(event) => onDraftChange("weight", event.target.value)}
+                      className="h-10 border-0 bg-secondary text-center font-medium"
+                      disabled={!isEditableRow}
+                    />
+
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      placeholder={exercise.targetReps}
+                      value={savedSet ? String(savedSet.reps) : isEditableRow ? state.reps : ""}
+                      onChange={(event) => onDraftChange("reps", event.target.value)}
+                      className="h-10 border-0 bg-secondary text-center font-medium"
+                      disabled={!isEditableRow}
+                    />
+
+                    {savedSet ? (
+                      <div className="flex h-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                        <Check className="size-4" />
+                      </div>
+                    ) : isEditableRow ? (
+                      <button
+                        onClick={() => void onSave()}
+                        className={cn(
+                          "flex h-10 items-center justify-center rounded-lg transition-colors",
+                          state.weight && state.reps
+                            ? "bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                            : "bg-secondary/60 text-muted-foreground/50",
+                        )}
+                        disabled={!state.weight || !state.reps}
+                      >
+                        <Check className="size-4" />
+                      </button>
+                    ) : (
+                      <div className="h-10 rounded-lg bg-secondary/40" />
+                    )}
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
+
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-secondary/50 p-2.5">
+              <Clock className="size-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">
+                Descanso recomendado: <span className="font-medium text-foreground">{exercise.restSeconds}s</span>
+              </span>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )
