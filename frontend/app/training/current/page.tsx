@@ -2,14 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  History,
-  Play,
-} from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Clock, History, RefreshCcw } from "lucide-react"
 import type { ExerciseDTO, HomeTodayDTO, WorkoutExerciseDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { api } from "@/lib/api"
@@ -79,7 +72,7 @@ function getExerciseCompletion(exercise: WorkoutExerciseDTO) {
 
 function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
   return session.exercises.reduce<Record<string, ExerciseUiState>>((accumulator, exercise, index) => {
-    accumulator[exercise.exerciseId] = {
+    accumulator[exercise.id] = {
       expanded: index === 0,
       weight: exercise.sets.at(-1)?.weight?.toString() ?? "",
       reps: "",
@@ -95,9 +88,13 @@ export default function TrainingCurrentPage() {
   const [home, setHome] = useState<HomeTodayDTO | null>(null)
   const [session, setSession] = useState<WorkoutSessionDTO | null>(null)
   const [selectedExercise, setSelectedExercise] = useState<ExerciseDTO | null>(null)
+  const [replacementExercise, setReplacementExercise] = useState<ExerciseDTO | null>(null)
+  const [exerciseToReplace, setExerciseToReplace] = useState<WorkoutExerciseDTO | null>(null)
   const [selectedPlanDayId, setSelectedPlanDayId] = useState("")
   const [pending, setPending] = useState(false)
   const [creatingExercise, setCreatingExercise] = useState(false)
+  const [replacingExercise, setReplacingExercise] = useState(false)
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false)
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [completedSessionId, setCompletedSessionId] = useState<string | null>(null)
@@ -125,6 +122,8 @@ export default function TrainingCurrentPage() {
       setHome(null)
       setSession(null)
       setSelectedExercise(null)
+      setReplacementExercise(null)
+      setExerciseToReplace(null)
       setSelectedPlanDayId("")
       setExerciseUiState({})
     }
@@ -148,11 +147,11 @@ export default function TrainingCurrentPage() {
 
       setExerciseUiState(
         draft
-          ? Object.entries(baseState).reduce<Record<string, ExerciseUiState>>((accumulator, [exerciseId, state]) => {
-              accumulator[exerciseId] = {
-                expanded: draft.exercises[exerciseId]?.expanded ?? state.expanded,
-                weight: draft.exercises[exerciseId]?.weight ?? state.weight,
-                reps: draft.exercises[exerciseId]?.reps ?? state.reps,
+          ? Object.entries(baseState).reduce<Record<string, ExerciseUiState>>((accumulator, [workoutExerciseId, state]) => {
+              accumulator[workoutExerciseId] = {
+                expanded: draft.exercises[workoutExerciseId]?.expanded ?? state.expanded,
+                weight: draft.exercises[workoutExerciseId]?.weight ?? state.weight,
+                reps: draft.exercises[workoutExerciseId]?.reps ?? state.reps,
               }
               return accumulator
             }, {})
@@ -232,11 +231,11 @@ export default function TrainingCurrentPage() {
     })
   }
 
-  function updateExerciseUi(exerciseId: string, updater: (state: ExerciseUiState) => ExerciseUiState) {
+  function updateExerciseUi(workoutExerciseId: string, updater: (state: ExerciseUiState) => ExerciseUiState) {
     setExerciseUiState((currentState) => {
       const nextState = {
         ...currentState,
-        [exerciseId]: updater(currentState[exerciseId] ?? { expanded: false, weight: "", reps: "" }),
+        [workoutExerciseId]: updater(currentState[workoutExerciseId] ?? { expanded: false, weight: "", reps: "" }),
       }
 
       void persistExerciseUiState(nextState)
@@ -297,7 +296,7 @@ export default function TrainingCurrentPage() {
     const operations = await listSetOperations(sessionId)
     for (const operation of operations) {
       try {
-        await api.upsertWorkoutSet(operation.sessionId, operation.exerciseId, operation.payload)
+        await api.upsertWorkoutSet(operation.sessionId, operation.workoutExerciseId, operation.payload)
         await removeSetOperation(operation.id)
       } catch {
         return
@@ -305,11 +304,11 @@ export default function TrainingCurrentPage() {
     }
   }
 
-  async function saveSet(exerciseId: string) {
+  async function saveSet(workoutExerciseId: string) {
     if (!session) return
 
-    const draft = exerciseUiState[exerciseId]
-    const exercise = session.exercises.find((item) => item.exerciseId === exerciseId)
+    const draft = exerciseUiState[workoutExerciseId]
+    const exercise = session.exercises.find((item) => item.id === workoutExerciseId)
 
     if (!draft || !exercise || !draft.weight || !draft.reps) {
       return
@@ -326,7 +325,7 @@ export default function TrainingCurrentPage() {
     const nextSession: WorkoutSessionDTO = {
       ...session,
       exercises: session.exercises.map((item) =>
-        item.exerciseId === exerciseId
+        item.id === workoutExerciseId
           ? {
               ...item,
               sets: [
@@ -348,7 +347,7 @@ export default function TrainingCurrentPage() {
 
     const nextExerciseState = {
       ...exerciseUiState,
-      [exerciseId]: {
+      [workoutExerciseId]: {
         ...draft,
         expanded: true,
         weight: draft.weight,
@@ -363,18 +362,51 @@ export default function TrainingCurrentPage() {
       id: session.id,
       exercises: nextExerciseState,
     })
-    await queueSetOperation(session.id, exerciseId, payload)
+    await queueSetOperation(session.id, workoutExerciseId, payload)
     setPending(true)
 
     try {
-      const synced = await api.upsertWorkoutSet(session.id, exerciseId, payload)
+      const synced = await api.upsertWorkoutSet(session.id, workoutExerciseId, payload)
       await saveSessionSnapshot(synced)
       setSession(synced)
-      await removeSetOperation(`${session.id}-${exerciseId}-${setNumber}`)
+      await removeSetOperation(`${session.id}-${workoutExerciseId}-${setNumber}`)
     } catch {
       // Keep the queued operation to retry later when connectivity is restored.
     } finally {
       setPending(false)
+    }
+  }
+
+  function openReplaceDialog(exercise: WorkoutExerciseDTO) {
+    setExerciseToReplace(exercise)
+    setReplacementExercise(null)
+    setReplaceDialogOpen(true)
+  }
+
+  async function replaceExerciseInSession() {
+    if (!session || !exerciseToReplace || !replacementExercise) {
+      return
+    }
+
+    setReplacingExercise(true)
+
+    try {
+      const updated = await api.replaceWorkoutExercise(session.id, exerciseToReplace.id, {
+        exerciseId: replacementExercise.id,
+      })
+      await saveSessionSnapshot(updated)
+      setSession(updated)
+      setReplacementExercise(null)
+      setExerciseToReplace(null)
+      setReplaceDialogOpen(false)
+    } catch (cause) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo cambiar el ejercicio",
+        description: cause instanceof Error ? cause.message : "Ocurrio un error inesperado.",
+      })
+    } finally {
+      setReplacingExercise(false)
     }
   }
 
@@ -527,21 +559,22 @@ export default function TrainingCurrentPage() {
                 key={exercise.id}
                 exercise={exercise}
                 exerciseIndex={exerciseIndex}
-                state={exerciseUiState[exercise.exerciseId] ?? { expanded: exerciseIndex === 0, weight: "", reps: "" }}
+                state={exerciseUiState[exercise.id] ?? { expanded: exerciseIndex === 0, weight: "", reps: "" }}
                 previousPerformance={previousPerformanceByExercise[exercise.exerciseId]}
                 onToggleExpand={() =>
-                  updateExerciseUi(exercise.exerciseId, (current) => ({
+                  updateExerciseUi(exercise.id, (current) => ({
                     ...current,
                     expanded: !current.expanded,
                   }))
                 }
                 onDraftChange={(field, value) =>
-                  updateExerciseUi(exercise.exerciseId, (current) => ({
+                  updateExerciseUi(exercise.id, (current) => ({
                     ...current,
                     [field]: value,
                   }))
                 }
-                onSave={() => saveSet(exercise.exerciseId)}
+                onSave={() => saveSet(exercise.id)}
+                onReplace={!planless && exercise.sets.length === 0 ? () => openReplaceDialog(exercise) : undefined}
               />
             ))}
           </div>
@@ -630,6 +663,53 @@ export default function TrainingCurrentPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Dialog
+        open={replaceDialogOpen}
+        onOpenChange={(open) => {
+          setReplaceDialogOpen(open)
+          if (!open) {
+            setExerciseToReplace(null)
+            setReplacementExercise(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar ejercicio del plan</DialogTitle>
+            <DialogDescription>
+              {exerciseToReplace
+                ? `Este cambio solo afecta la sesion actual. Reemplazaras ${exerciseToReplace.exerciseName}.`
+                : "Selecciona el ejercicio que vas a hacer en esta sesion."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <ExerciseSearchSelect
+              value={replacementExercise?.id ?? ""}
+              selectedExercise={replacementExercise ?? undefined}
+              searchExercises={(query) => api.getExercises(query, 20)}
+              onSelect={setReplacementExercise}
+              placeholder="Selecciona el ejercicio real"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReplaceDialogOpen(false)
+                setExerciseToReplace(null)
+                setReplacementExercise(null)
+              }}
+              disabled={replacingExercise}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={replaceExerciseInSession} disabled={!replacementExercise || replacingExercise}>
+              {replacingExercise ? "Cambiando..." : "Confirmar cambio"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={completedDialogOpen} onOpenChange={setCompletedDialogOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
@@ -672,6 +752,7 @@ function ExerciseCard({
   onToggleExpand,
   onDraftChange,
   onSave,
+  onReplace,
 }: {
   exercise: WorkoutExerciseDTO
   exerciseIndex: number
@@ -680,6 +761,7 @@ function ExerciseCard({
   onToggleExpand: () => void
   onDraftChange: (field: "weight" | "reps", value: string) => void
   onSave: () => Promise<void>
+  onReplace?: () => void
 }) {
   const completed = getExerciseCompletion(exercise)
   const displayRowCount = Math.max(exercise.targetSets, exercise.sets.length + 1)
@@ -706,7 +788,14 @@ function ExerciseCard({
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className={cn("font-medium", completed && "text-primary")}>{exercise.exerciseName}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className={cn("font-medium", completed && "text-primary")}>{exercise.exerciseName}</p>
+              {exercise.isReplacement ? (
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Reemplazo del plan
+                </span>
+              ) : null}
+            </div>
             <p className="text-xs text-muted-foreground">
               {exercise.targetSets > 0 || exercise.targetReps.trim().length > 0
                 ? `${exercise.targetSets} series x ${exercise.targetReps} reps · ${exercise.restSeconds}s descanso`
@@ -723,6 +812,15 @@ function ExerciseCard({
 
         {state.expanded ? (
           <div className="border-t border-border/50 px-4 pb-4">
+            {onReplace ? (
+              <div className="pt-3">
+                <Button variant="outline" size="sm" onClick={onReplace} className="gap-2">
+                  <RefreshCcw className="size-4" />
+                  Cambiar ejercicio
+                </Button>
+              </div>
+            ) : null}
+
             {previousPerformance ? (
               <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
                 <History className="size-3.5" />

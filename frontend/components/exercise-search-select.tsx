@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import type { ExerciseDTO } from '@my-progress/shared'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,11 @@ export function ExerciseSearchSelect({
   const [results, setResults] = useState<ExerciseDTO[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchExercisesRef = useRef(searchExercises)
+
+  useEffect(() => {
+    searchExercisesRef.current = searchExercises
+  }, [searchExercises])
 
   useEffect(() => {
     if (!open) {
@@ -53,7 +58,7 @@ export function ExerciseSearchSelect({
       setError(null)
 
       try {
-        const items = await searchExercises(query.trim())
+        const items = await searchExercisesRef.current(query.trim())
         if (!cancelled) {
           setResults(items)
         }
@@ -73,7 +78,7 @@ export function ExerciseSearchSelect({
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [open, query, searchExercises])
+  }, [open, query])
 
   const visibleResults = useMemo(() => {
     if (!selectedExercise || results.some((item) => item.id === selectedExercise.id)) {
