@@ -108,9 +108,13 @@ model WorkoutSession {
 model WorkoutExercise {
   id                String         @id @default(cuid())
   workoutSessionId  String
+  position          Int            @default(0)
   exerciseId        String
   exerciseName      String
   planExerciseId    String?
+  replacesPlanExerciseId String?
+  replacementReason String?
+  isReplacement     Boolean        @default(false)
   targetSets        Int
   targetReps        String
   restSeconds       Int
@@ -119,7 +123,7 @@ model WorkoutExercise {
   exercise          Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
   sets              WorkoutSet[]
 
-  @@unique([workoutSessionId, exerciseId])
+  @@index([workoutSessionId, position])
 }
 
 model WorkoutSet {

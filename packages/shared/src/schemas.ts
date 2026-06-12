@@ -30,6 +30,10 @@ export const createWorkoutExerciseInputSchema = z.object({
   exerciseId: z.string().min(1),
 })
 
+export const replaceWorkoutExerciseInputSchema = z.object({
+  exerciseId: z.string().min(1),
+})
+
 export const createPlanInputSchema = z.object({
   name: z.string().min(2).max(100),
   startDate: z.string().datetime(),

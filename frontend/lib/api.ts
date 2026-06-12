@@ -7,6 +7,7 @@ import type {
   HomeTodayDTO,
   PlanDTO,
   ProgressSeriesDTO,
+  ReplaceWorkoutExerciseInputDTO,
   UpdateUserProfileInputDTO,
   UserProfileDTO,
   WorkoutSessionDTO,
@@ -90,13 +91,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  replaceWorkoutExercise: (sessionId: string, workoutExerciseId: string, input: ReplaceWorkoutExerciseInputDTO) =>
+    request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/exercises/${workoutExerciseId}/replace`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   updateWorkoutSession: (sessionId: string, input: Partial<WorkoutSessionDTO>) =>
     request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}`, {
       method: "PUT",
       body: JSON.stringify(input),
     }),
-  upsertWorkoutSet: (sessionId: string, exerciseId: string, input: WorkoutSetInputDTO) =>
-    request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/exercises/${exerciseId}/sets`, {
+  upsertWorkoutSet: (sessionId: string, workoutExerciseId: string, input: WorkoutSetInputDTO) =>
+    request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/exercises/${workoutExerciseId}/sets`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
