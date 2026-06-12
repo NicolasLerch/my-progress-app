@@ -76,9 +76,13 @@ export interface WorkoutSetDTO {
 export interface WorkoutExerciseDTO {
   id: string
   workoutSessionId: string
+  position: number
   exerciseId: string
   exerciseName: string
   planExerciseId?: string
+  replacesPlanExerciseId?: string
+  replacementReason?: string
+  isReplacement: boolean
   targetSets: number
   targetReps: string
   restSeconds: number
@@ -179,6 +183,10 @@ export type CreateWorkoutSessionInputDTO =
   | CreatePlanlessWorkoutSessionInputDTO
 
 export interface CreateWorkoutExerciseInputDTO {
+  exerciseId: string
+}
+
+export interface ReplaceWorkoutExerciseInputDTO {
   exerciseId: string
 }
 

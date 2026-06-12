@@ -91,9 +91,13 @@ async function seed() {
         exercises: {
           create: session.exercises.map((exercise) => ({
             id: exercise.id,
+            position: exercise.position,
             exerciseId: exercise.exerciseId,
             exerciseName: exercise.exerciseName,
             planExerciseId: exercise.planExerciseId,
+            replacesPlanExerciseId: exercise.replacesPlanExerciseId,
+            replacementReason: exercise.replacementReason,
+            isReplacement: exercise.isReplacement,
             targetSets: exercise.targetSets,
             targetReps: exercise.targetReps,
             restSeconds: exercise.restSeconds,

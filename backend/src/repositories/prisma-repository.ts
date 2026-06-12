@@ -13,6 +13,7 @@ import {
   type PlanDTO,
   type PlanExerciseDTO,
   type ProgressSeriesDTO,
+  type ReplaceWorkoutExerciseInputDTO,
   type UpdateUserProfileInputDTO,
   type UserProfileDTO,
   type UserDTO,
@@ -35,7 +36,7 @@ const planInclude = {
 
 const workoutSessionInclude = {
   exercises: {
-    orderBy: { id: "asc" },
+    orderBy: [{ position: "asc" }, { id: "asc" }],
     include: {
       sets: {
         orderBy: { setNumber: "asc" },
@@ -145,9 +146,13 @@ function mapWorkoutSession(session: WorkoutSessionWithRelations): WorkoutSession
     exercises: session.exercises.map((exercise) => ({
       id: exercise.id,
       workoutSessionId: exercise.workoutSessionId,
+      position: exercise.position,
       exerciseId: exercise.exerciseId,
       exerciseName: exercise.exerciseName,
       planExerciseId: exercise.planExerciseId ?? undefined,
+      replacesPlanExerciseId: exercise.replacesPlanExerciseId ?? undefined,
+      replacementReason: exercise.replacementReason ?? undefined,
+      isReplacement: exercise.isReplacement,
       targetSets: exercise.targetSets,
       targetReps: exercise.targetReps,
       restSeconds: exercise.restSeconds,
@@ -632,10 +637,12 @@ export class PrismaRepository {
         planName: plan.name,
         dayName: day.name,
         exercises: {
-          create: day.exercises.map((exercise) => ({
+          create: day.exercises.map((exercise, index) => ({
+            position: index + 1,
             exerciseId: exercise.exerciseId,
             exerciseName: exercise.exercise.name,
             planExerciseId: exercise.id,
+            isReplacement: false,
             targetSets: exercise.targetSets,
             targetReps: exercise.targetReps,
             restSeconds: exercise.restSeconds,
@@ -672,26 +679,82 @@ export class PrismaRepository {
       return null
     }
 
-    const existingExercise = await this.prisma.workoutExercise.findFirst({
+    const position = await this.prisma.workoutExercise.count({
       where: {
         workoutSessionId: sessionId,
-        exerciseId,
       },
-      select: { id: true },
     })
 
-    if (!existingExercise) {
-      await this.prisma.workoutExercise.create({
-        data: {
-          workoutSessionId: sessionId,
-          exerciseId,
-          exerciseName: exercise.name,
-          targetSets: 0,
-          targetReps: "",
-          restSeconds: 0,
-        },
-      })
+    await this.prisma.workoutExercise.create({
+      data: {
+        workoutSessionId: sessionId,
+        position: position + 1,
+        exerciseId,
+        exerciseName: exercise.name,
+        isReplacement: false,
+        targetSets: 0,
+        targetReps: "",
+        restSeconds: 0,
+      },
+    })
+
+    return this.getWorkoutSession(userId, sessionId)
+  }
+
+  async replaceWorkoutExercise(
+    userId: string,
+    sessionId: string,
+    workoutExerciseId: string,
+    input: ReplaceWorkoutExerciseInputDTO,
+  ): Promise<WorkoutSessionDTO | null> {
+    const session = await this.prisma.workoutSession.findFirst({
+      where: { id: sessionId, userId },
+      select: { id: true, planId: true },
+    })
+
+    if (!session) {
+      return null
     }
+
+    const workoutExercise = await this.prisma.workoutExercise.findFirst({
+      where: {
+        id: workoutExerciseId,
+        workoutSessionId: sessionId,
+      },
+      include: {
+        sets: {
+          select: { id: true },
+          take: 1,
+        },
+      },
+    })
+
+    if (!workoutExercise) {
+      return null
+    }
+
+    if (workoutExercise.sets.length > 0) {
+      throw new Error("No se puede cambiar un ejercicio que ya tiene series guardadas.")
+    }
+
+    const exercise = await this.prisma.exercise.findUnique({
+      where: { id: input.exerciseId },
+      select: { id: true, name: true },
+    })
+
+    if (!exercise) {
+      return null
+    }
+
+    await this.prisma.workoutExercise.update({
+      where: { id: workoutExerciseId },
+      data: {
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        replacesPlanExerciseId: workoutExercise.planExerciseId ?? workoutExercise.replacesPlanExerciseId,
+        isReplacement: true,
+      },
+    })
 
     return this.getWorkoutSession(userId, sessionId)
   }
@@ -708,7 +771,7 @@ export class PrismaRepository {
   async upsertWorkoutSet(
     userId: string,
     sessionId: string,
-    exerciseId: string,
+    workoutExerciseId: string,
     payload: WorkoutSetInputDTO,
   ): Promise<WorkoutSessionDTO | null> {
     const session = await this.prisma.workoutSession.findFirst({
@@ -722,8 +785,8 @@ export class PrismaRepository {
 
     const workoutExercise = await this.prisma.workoutExercise.findFirst({
       where: {
+        id: workoutExerciseId,
         workoutSessionId: sessionId,
-        exerciseId,
       },
       select: { id: true },
     })
@@ -904,9 +967,13 @@ export class PrismaRepository {
         {
           id: row.id,
           workoutSessionId: row.workoutSessionId,
+          position: row.position,
           exerciseId: row.exerciseId,
           exerciseName: row.exerciseName,
           planExerciseId: row.planExerciseId ?? undefined,
+          replacesPlanExerciseId: row.replacesPlanExerciseId ?? undefined,
+          replacementReason: row.replacementReason ?? undefined,
+          isReplacement: row.isReplacement,
           targetSets: row.targetSets,
           targetReps: row.targetReps,
           restSeconds: row.restSeconds,

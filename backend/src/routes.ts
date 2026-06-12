@@ -3,6 +3,7 @@ import {
   createPlanInputSchema,
   createWorkoutExerciseInputSchema,
   createWorkoutSessionInputSchema,
+  replaceWorkoutExerciseInputSchema,
   updatePlanDayInputSchema,
   updateUserProfileInputSchema,
   updateWorkoutSessionInputSchema,
@@ -137,10 +138,10 @@ export async function registerRoutes(app: FastifyInstance) {
     return session
   })
 
-  app.post("/workout-sessions/:id/exercises/:exerciseId/sets", async (request, reply) => {
-    const params = request.params as { id: string; exerciseId: string }
+  app.post("/workout-sessions/:id/exercises/:workoutExerciseId/sets", async (request, reply) => {
+    const params = request.params as { id: string; workoutExerciseId: string }
     const input = workoutSetInputSchema.parse(request.body)
-    const session = await repository.upsertWorkoutSet(request.user.id, params.id, params.exerciseId, input)
+    const session = await repository.upsertWorkoutSet(request.user.id, params.id, params.workoutExerciseId, input)
     if (!session) {
       return reply.code(404).send({ message: "Session or exercise not found." })
     }
@@ -155,6 +156,24 @@ export async function registerRoutes(app: FastifyInstance) {
       return reply.code(404).send({ message: "Session or exercise not found." })
     }
     return session
+  })
+
+  app.post("/workout-sessions/:id/exercises/:workoutExerciseId/replace", async (request, reply) => {
+    const params = request.params as { id: string; workoutExerciseId: string }
+    const input = replaceWorkoutExerciseInputSchema.parse(request.body)
+
+    try {
+      const session = await repository.replaceWorkoutExercise(request.user.id, params.id, params.workoutExerciseId, input)
+      if (!session) {
+        return reply.code(404).send({ message: "Session or exercise not found." })
+      }
+      return session
+    } catch (error) {
+      if (error instanceof Error) {
+        return reply.code(400).send({ message: error.message })
+      }
+      throw error
+    }
   })
 
   app.put("/workout-sessions/:id", async (request, reply) => {

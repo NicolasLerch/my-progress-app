@@ -1,7 +1,7 @@
 import type { WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 
 const DB_NAME = "my-progress-offline"
-const DB_VERSION = 2
+const DB_VERSION = 3
 const SESSION_STORE = "sessionSnapshots"
 const QUEUE_STORE = "pendingSetOps"
 const DRAFT_STORE = "trainingDrafts"
@@ -9,7 +9,7 @@ const DRAFT_STORE = "trainingDrafts"
 interface PendingSetOperation {
   id: string
   sessionId: string
-  exerciseId: string
+  workoutExerciseId: string
   payload: WorkoutSetInputDTO
 }
 
@@ -104,14 +104,14 @@ export async function deleteSessionSnapshot(sessionId: string) {
   })
 }
 
-export async function queueSetOperation(sessionId: string, exerciseId: string, payload: WorkoutSetInputDTO) {
+export async function queueSetOperation(sessionId: string, workoutExerciseId: string, payload: WorkoutSetInputDTO) {
   if (typeof indexedDB === "undefined") {
     return
   }
   const operation: PendingSetOperation = {
-    id: `${sessionId}-${exerciseId}-${payload.setNumber}`,
+    id: `${sessionId}-${workoutExerciseId}-${payload.setNumber}`,
     sessionId,
-    exerciseId,
+    workoutExerciseId,
     payload,
   }
 
