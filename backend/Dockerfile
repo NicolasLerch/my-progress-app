@@ -13,7 +13,9 @@ RUN pnpm install --frozen-lockfile
 COPY backend backend
 COPY packages/shared packages/shared
 
-RUN pnpm --filter @my-progress/shared build && pnpm --filter backend build
+RUN pnpm --filter @my-progress/shared build
+RUN pnpm --filter backend prisma:generate
+RUN pnpm --filter backend tsc -p tsconfig.json
 
 FROM node:20-alpine AS runner
 
@@ -28,12 +30,14 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY backend/prisma backend/prisma
 
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/backend/dist backend/dist
-COPY --from=builder /app/backend/prisma backend/prisma
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
+COPY --from=builder /app/node_modules/@prisma/client /app/node_modules/@prisma/client
+COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 
 EXPOSE 8080
 
