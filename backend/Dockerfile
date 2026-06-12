@@ -14,8 +14,8 @@ COPY backend backend
 COPY packages/shared packages/shared
 
 RUN pnpm --filter @my-progress/shared build
-RUN pnpm --filter backend prisma:generate
-RUN pnpm --filter backend exec tsc -p tsconfig.json
+RUN cd backend && pnpm exec prisma generate
+RUN cd backend && pnpm exec tsc -p tsconfig.json
 
 FROM node:20-alpine AS runner
 
@@ -36,8 +36,6 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/backend/dist backend/dist
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
-COPY --from=builder /app/node_modules/@prisma/client /app/node_modules/@prisma/client
-COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 
 EXPOSE 8080
 
