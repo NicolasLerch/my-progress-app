@@ -15,7 +15,7 @@ COPY packages/shared packages/shared
 
 RUN pnpm --filter @my-progress/shared build
 RUN pnpm --filter backend prisma:generate
-RUN pnpm --filter backend tsc -p tsconfig.json
+RUN pnpm --filter backend exec tsc -p tsconfig.json
 
 FROM node:20-alpine AS runner
 
