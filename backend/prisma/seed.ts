@@ -4,7 +4,9 @@ import {
   plansSeed,
   workoutSessionsSeed,
 } from "@my-progress/shared"
-import { PrismaClient, Prisma } from "@prisma/client"
+import prismaClientPkg from "@prisma/client"
+
+const { PrismaClient, Prisma } = prismaClientPkg
 
 const prisma = new PrismaClient()
 

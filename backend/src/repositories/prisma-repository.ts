@@ -1,4 +1,5 @@
-import { Prisma, type PrismaClient } from "@prisma/client"
+import prismaClientPkg from "@prisma/client"
+import type { Prisma as PrismaNamespace, PrismaClient as PrismaClientType } from "@prisma/client"
 import {
   buildProgressSeries,
   calculateSessionVolume,
@@ -21,6 +22,8 @@ import {
   type WorkoutSetInputDTO,
 } from "@my-progress/shared"
 
+const { Prisma } = prismaClientPkg
+
 const planInclude = {
   days: {
     orderBy: { order: "asc" },
@@ -32,7 +35,7 @@ const planInclude = {
       },
     },
   },
-} satisfies Prisma.PlanInclude
+} satisfies PrismaNamespace.PlanInclude
 
 const workoutSessionInclude = {
   exercises: {
@@ -43,10 +46,10 @@ const workoutSessionInclude = {
       },
     },
   },
-} satisfies Prisma.WorkoutSessionInclude
+} satisfies PrismaNamespace.WorkoutSessionInclude
 
-type PlanWithRelations = Prisma.PlanGetPayload<{ include: typeof planInclude }>
-type WorkoutSessionWithRelations = Prisma.WorkoutSessionGetPayload<{ include: typeof workoutSessionInclude }>
+type PlanWithRelations = PrismaNamespace.PlanGetPayload<{ include: typeof planInclude }>
+type WorkoutSessionWithRelations = PrismaNamespace.WorkoutSessionGetPayload<{ include: typeof workoutSessionInclude }>
 type ExerciseSearchOptions = {
   query?: string
   limit?: number
@@ -56,7 +59,7 @@ function toIsoString(value: Date | null | undefined) {
   return value?.toISOString()
 }
 
-function decimalToNumber(value: Prisma.Decimal | number) {
+function decimalToNumber(value: PrismaNamespace.Decimal | number) {
   return typeof value === "number" ? value : value.toNumber()
 }
 
@@ -66,8 +69,8 @@ function mapUser(user: {
   name: string
   lastName?: string | null
   birthDate?: string | Date | null
-  weight?: Prisma.Decimal | number | null
-  height?: Prisma.Decimal | number | null
+  weight?: PrismaNamespace.Decimal | number | null
+  height?: PrismaNamespace.Decimal | number | null
   createdAt?: string | Date
 }): UserDTO {
   return {
@@ -176,7 +179,7 @@ function minutesBetween(startedAt: Date, completedAt: Date) {
   return Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 60000))
 }
 
-function buildExerciseSearchWhere(query?: string): Prisma.ExerciseWhereInput | undefined {
+function buildExerciseSearchWhere(query?: string): PrismaNamespace.ExerciseWhereInput | undefined {
   const search = query?.trim()
   if (!search) {
     return undefined
@@ -201,7 +204,7 @@ function buildExerciseSearchWhere(query?: string): Prisma.ExerciseWhereInput | u
 }
 
 export class PrismaRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClientType) {}
 
   async getExercises(options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
     const exercises = await this.prisma.exercise.findMany({
