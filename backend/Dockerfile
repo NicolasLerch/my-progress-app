@@ -31,9 +31,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY backend/prisma backend/prisma
-
-RUN pnpm install --frozen-lockfile --prod
-
+COPY --from=builder /app/node_modules node_modules
+COPY --from=builder /app/backend/node_modules backend/node_modules
 COPY --from=builder /app/backend/dist backend/dist
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
 
