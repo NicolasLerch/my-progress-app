@@ -15,7 +15,19 @@ import type {
 } from "@my-progress/shared"
 import { supabase } from "@/lib/supabase"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
+
+function getApiUrl() {
+  if (API_URL) {
+    return API_URL
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return "http://localhost:4000"
+  }
+
+  throw new Error("NEXT_PUBLIC_API_URL no esta configurada para produccion.")
+}
 
 function withSearchParams(path: string, params: Record<string, string | number | undefined>) {
   const searchParams = new URLSearchParams()
@@ -48,7 +60,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   headers.set("Authorization", `Bearer ${session.access_token}`)
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers,
     cache: "no-store",
