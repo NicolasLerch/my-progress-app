@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, ChevronUp, Clock, History, RefreshCcw } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Clock, History, Pencil, RefreshCcw } from "lucide-react"
 import type { ExerciseDTO, HomeTodayDTO, WorkoutExerciseDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { api } from "@/lib/api"
@@ -76,6 +76,7 @@ function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
       expanded: index === 0,
       weight: exercise.sets.at(-1)?.weight?.toString() ?? "",
       reps: "",
+      editingSetNumber: undefined,
     }
 
     return accumulator
@@ -152,6 +153,7 @@ export default function TrainingCurrentPage() {
                 expanded: draft.exercises[workoutExerciseId]?.expanded ?? state.expanded,
                 weight: draft.exercises[workoutExerciseId]?.weight ?? state.weight,
                 reps: draft.exercises[workoutExerciseId]?.reps ?? state.reps,
+                editingSetNumber: draft.exercises[workoutExerciseId]?.editingSetNumber,
               }
               return accumulator
             }, {})
@@ -314,7 +316,8 @@ export default function TrainingCurrentPage() {
       return
     }
 
-    const setNumber = exercise.sets.length + 1
+    const editingSetNumber = draft.editingSetNumber
+    const setNumber = editingSetNumber ?? exercise.sets.length + 1
     const payload: WorkoutSetInputDTO = {
       setNumber,
       weight: Number(draft.weight),
@@ -328,30 +331,45 @@ export default function TrainingCurrentPage() {
         item.id === workoutExerciseId
           ? {
               ...item,
-              sets: [
-                ...item.sets,
-                {
-                  id: `${item.id}-${setNumber}`,
-                  workoutExerciseId: item.id,
-                  setNumber,
-                  weight: payload.weight,
-                  reps: payload.reps,
-                  createdAt: payload.updatedAt,
-                  updatedAt: payload.updatedAt,
-                },
-              ],
+              sets: editingSetNumber
+                ? item.sets.map((savedSet) =>
+                    savedSet.setNumber === setNumber
+                      ? {
+                          ...savedSet,
+                          weight: payload.weight,
+                          reps: payload.reps,
+                          updatedAt: payload.updatedAt,
+                        }
+                      : savedSet,
+                  )
+                : [
+                    ...item.sets,
+                    {
+                      id: `${item.id}-${setNumber}`,
+                      workoutExerciseId: item.id,
+                      setNumber,
+                      weight: payload.weight,
+                      reps: payload.reps,
+                      createdAt: payload.updatedAt,
+                      updatedAt: payload.updatedAt,
+                    },
+                  ],
             }
           : item,
       ),
     }
+
+    const updatedExercise = nextSession.exercises.find((item) => item.id === workoutExerciseId)
+    const nextDefaultWeight = updatedExercise?.sets.at(-1)?.weight?.toString() ?? ""
 
     const nextExerciseState = {
       ...exerciseUiState,
       [workoutExerciseId]: {
         ...draft,
         expanded: true,
-        weight: draft.weight,
+        weight: nextDefaultWeight,
         reps: "",
+        editingSetNumber: undefined,
       },
     }
 
@@ -573,6 +591,30 @@ export default function TrainingCurrentPage() {
                     [field]: value,
                   }))
                 }
+                onStartEdit={(setNumber) =>
+                  updateExerciseUi(exercise.id, (current) => {
+                    const savedSet = exercise.sets.find((item) => item.setNumber === setNumber)
+                    if (!savedSet) {
+                      return current
+                    }
+
+                    return {
+                      ...current,
+                      expanded: true,
+                      editingSetNumber: setNumber,
+                      weight: String(savedSet.weight),
+                      reps: String(savedSet.reps),
+                    }
+                  })
+                }
+                onCancelEdit={() =>
+                  updateExerciseUi(exercise.id, (current) => ({
+                    ...current,
+                    editingSetNumber: undefined,
+                    weight: exercise.sets.at(-1)?.weight?.toString() ?? "",
+                    reps: "",
+                  }))
+                }
                 onSave={() => saveSet(exercise.id)}
                 onReplace={!planless && exercise.sets.length === 0 ? () => openReplaceDialog(exercise) : undefined}
               />
@@ -587,8 +629,8 @@ export default function TrainingCurrentPage() {
                 <h2 className="font-semibold">Agregar ejercicio</h2>
                 <p className="text-xs text-muted-foreground">Suma ejercicios a esta sesion libre antes o durante el entrenamiento.</p>
               </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="min-w-0 flex-1">
                   <ExerciseSearchSelect
                     value={selectedExercise?.id ?? ""}
                     selectedExercise={selectedExercise ?? undefined}
@@ -596,7 +638,11 @@ export default function TrainingCurrentPage() {
                     onSelect={setSelectedExercise}
                   />
                 </div>
-                <Button onClick={addExerciseToSession} disabled={!selectedExercise || creatingExercise}>
+                <Button
+                  onClick={addExerciseToSession}
+                  disabled={!selectedExercise || creatingExercise}
+                  className="w-full sm:w-auto"
+                >
                   {creatingExercise ? "Agregando..." : "Agregar"}
                 </Button>
               </div>
@@ -751,6 +797,8 @@ function ExerciseCard({
   previousPerformance,
   onToggleExpand,
   onDraftChange,
+  onStartEdit,
+  onCancelEdit,
   onSave,
   onReplace,
 }: {
@@ -760,6 +808,8 @@ function ExerciseCard({
   previousPerformance?: PreviousPerformance
   onToggleExpand: () => void
   onDraftChange: (field: "weight" | "reps", value: string) => void
+  onStartEdit: (setNumber: number) => void
+  onCancelEdit: () => void
   onSave: () => Promise<void>
   onReplace?: () => void
 }) {
@@ -831,6 +881,15 @@ function ExerciseCard({
             ) : null}
 
             <div className="mt-2 flex flex-col gap-2">
+              {state.editingSetNumber ? (
+                <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                  <span className="font-medium text-foreground">Editando serie {state.editingSetNumber}</span>
+                  <button className="text-primary" onClick={onCancelEdit}>
+                    Cancelar
+                  </button>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-[44px_1fr_1fr_48px] gap-2 px-1 text-xs font-medium text-muted-foreground">
                 <span>Serie</span>
                 <span>Peso</span>
@@ -841,7 +900,8 @@ function ExerciseCard({
               {Array.from({ length: displayRowCount }, (_, index) => {
                 const setNumber = index + 1
                 const savedSet = exercise.sets[index]
-                const isEditableRow = !savedSet && setNumber === exercise.sets.length + 1
+                const isEditingSavedSet = state.editingSetNumber === setNumber
+                const isEditableRow = isEditingSavedSet || (!savedSet && !state.editingSetNumber && setNumber === exercise.sets.length + 1)
 
                 return (
                   <div
@@ -866,7 +926,7 @@ function ExerciseCard({
                       type="number"
                       inputMode="decimal"
                       placeholder={exercise.sets.at(-1)?.weight?.toString() ?? "0"}
-                      value={savedSet ? String(savedSet.weight) : isEditableRow ? state.weight : ""}
+                      value={isEditableRow ? state.weight : savedSet ? String(savedSet.weight) : ""}
                       onChange={(event) => onDraftChange("weight", event.target.value)}
                       className="h-10 border-0 bg-secondary text-center font-medium"
                       disabled={!isEditableRow}
@@ -876,16 +936,33 @@ function ExerciseCard({
                       type="number"
                       inputMode="numeric"
                       placeholder={exercise.targetReps}
-                      value={savedSet ? String(savedSet.reps) : isEditableRow ? state.reps : ""}
+                      value={isEditableRow ? state.reps : savedSet ? String(savedSet.reps) : ""}
                       onChange={(event) => onDraftChange("reps", event.target.value)}
                       className="h-10 border-0 bg-secondary text-center font-medium"
                       disabled={!isEditableRow}
                     />
 
-                    {savedSet ? (
-                      <div className="flex h-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                    {savedSet && !isEditingSavedSet ? (
+                      <button
+                        onClick={() => onStartEdit(setNumber)}
+                        className="flex h-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:bg-primary/20 hover:text-primary"
+                        aria-label={`Editar serie ${setNumber}`}
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    ) : savedSet ? (
+                      <button
+                        onClick={() => void onSave()}
+                        className={cn(
+                          "flex h-10 items-center justify-center rounded-lg transition-colors",
+                          state.weight && state.reps
+                            ? "bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                            : "bg-secondary/60 text-muted-foreground/50",
+                        )}
+                        disabled={!state.weight || !state.reps}
+                      >
                         <Check className="size-4" />
-                      </div>
+                      </button>
                     ) : isEditableRow ? (
                       <button
                         onClick={() => void onSave()}

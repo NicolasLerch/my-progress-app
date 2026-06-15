@@ -17,6 +17,7 @@ export interface TrainingDraftExerciseState {
   expanded: boolean
   weight: string
   reps: string
+  editingSetNumber?: number
 }
 
 export interface TrainingDraftSnapshot {

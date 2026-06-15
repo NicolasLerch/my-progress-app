@@ -89,69 +89,71 @@ export function ExerciseSearchSelect({
   }, [results, selectedExercise])
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen)
-        if (!nextOpen) {
-          setQuery('')
-          setError(null)
-        }
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="h-10 w-full justify-between px-3 font-normal"
-        >
-          <span className="truncate text-left">
-            {selectedExercise?.name ? `${selectedExercise.name}${selectedExercise.muscleGroup ? ` - ${selectedExercise.muscleGroup}` : ''}` : placeholder}
-          </span>
-          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-        <Command shouldFilter={false}>
-          <CommandInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={searchPlaceholder}
-          />
-          <CommandList>
-            {loading ? (
-              <div className="px-3 py-6 text-center text-sm text-muted-foreground">Buscando ejercicios...</div>
-            ) : error ? (
-              <div className="px-3 py-6 text-center text-sm text-destructive">{error}</div>
-            ) : visibleResults.length === 0 ? (
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-            ) : (
-              <CommandGroup heading={query.trim() ? 'Resultados' : 'Sugeridos'}>
-                {visibleResults.map((exercise) => (
-                  <CommandItem
-                    key={exercise.id}
-                    value={`${exercise.name} ${exercise.muscleGroup}`}
-                    onSelect={() => {
-                      onSelect(exercise)
-                      setOpen(false)
-                      setQuery('')
-                    }}
-                  >
-                    <Check className={cn('size-4', value === exercise.id ? 'opacity-100' : 'opacity-0')} />
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate">{exercise.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{exercise.muscleGroup}</span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <div className="w-full min-w-0">
+      <Popover
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen)
+          if (!nextOpen) {
+            setQuery('')
+            setError(null)
+          }
+        }}
+      >
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className="h-10 w-full min-w-0 justify-between gap-2 overflow-hidden px-3 font-normal"
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectedExercise?.name ? `${selectedExercise.name}${selectedExercise.muscleGroup ? ` - ${selectedExercise.muscleGroup}` : ''}` : placeholder}
+            </span>
+            <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder={searchPlaceholder}
+            />
+            <CommandList>
+              {loading ? (
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">Buscando ejercicios...</div>
+              ) : error ? (
+                <div className="px-3 py-6 text-center text-sm text-destructive">{error}</div>
+              ) : visibleResults.length === 0 ? (
+                <CommandEmpty>{emptyMessage}</CommandEmpty>
+              ) : (
+                <CommandGroup heading={query.trim() ? 'Resultados' : 'Sugeridos'}>
+                  {visibleResults.map((exercise) => (
+                    <CommandItem
+                      key={exercise.id}
+                      value={`${exercise.name} ${exercise.muscleGroup}`}
+                      onSelect={() => {
+                        onSelect(exercise)
+                        setOpen(false)
+                        setQuery('')
+                      }}
+                    >
+                      <Check className={cn('size-4', value === exercise.id ? 'opacity-100' : 'opacity-0')} />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">{exercise.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">{exercise.muscleGroup}</span>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   )
 }
