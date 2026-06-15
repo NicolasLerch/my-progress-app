@@ -1,7 +1,7 @@
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open("my-progress-shell-v1").then((cache) =>
-      cache.addAll(["/", "/manifest.json", "/icon-light-32x32.png", "/apple-icon.png"]),
+      cache.addAll(["/", "/manifest.json", "/gym-near-svgrepo-com.svg", "/apple-icon.png"]),
     ),
   )
 })
