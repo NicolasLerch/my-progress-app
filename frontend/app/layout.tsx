@@ -16,14 +16,14 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'My Progress',
+  title: 'My Muscle App',
   description: 'Seguimiento mobile-first de planes, pesos y progreso del gimnasio.',
   generator: 'v0.app',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'My Progress',
+    title: 'My Muscle App',
   },
   icons: {
     icon: [
