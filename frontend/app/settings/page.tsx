@@ -367,7 +367,7 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground">My Progress v1.0.0</p>
+        <p className="text-center text-xs text-muted-foreground">My Muscle App v1.0.0</p>
       </div>
 
       <Dialog open={passwordDialogOpen} onOpenChange={handlePasswordDialogChange}>

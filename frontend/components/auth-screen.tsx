@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState } from "react"
 import { Eye, EyeOff, LoaderCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -81,16 +82,28 @@ export function AuthScreen() {
       <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-8">
         <Card className="w-full border-border/50 bg-card/95 shadow-lg">
           <CardHeader className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">My Progress</p>
-              <CardTitle className="text-2xl">Accede a tu progreso</CardTitle>
-              <CardDescription>Inicia sesión o crea tu cuenta para sincronizar planes y entrenamientos.</CardDescription>
+            <div className="space-y-3">
+              <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+                <Image
+                  src="/gym-near-svgrepo-com.svg"
+                  alt="My Muscle App"
+                  width={32}
+                  height={32}
+                  className="size-8"
+                  priority
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">My Muscle App</p>
+                <CardTitle className="text-2xl">Accede a tu progreso</CardTitle>
+                <CardDescription>Inicia sesion o crea tu cuenta para sincronizar planes y entrenamientos.</CardDescription>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "login" | "signup")} className="gap-4">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Iniciar sesión</TabsTrigger>
+                <TabsTrigger value="login">Iniciar sesion</TabsTrigger>
                 <TabsTrigger value="signup">Crear cuenta</TabsTrigger>
               </TabsList>
 
@@ -101,7 +114,7 @@ export function AuthScreen() {
                     <Input id="login-email" name="email" type="email" autoComplete="email" required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="login-password">Contraseña</Label>
+                    <Label htmlFor="login-password">Contrasena</Label>
                     <div className="relative">
                       <Input
                         id="login-password"
@@ -156,7 +169,7 @@ export function AuthScreen() {
                     <Input id="signup-email" name="email" type="email" autoComplete="email" required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="signup-password">Contraseña</Label>
+                    <Label htmlFor="signup-password">Contrasena</Label>
                     <div className="relative">
                       <Input
                         id="signup-password"
@@ -202,7 +215,7 @@ export function AuthScreen() {
           <DialogHeader>
             <DialogTitle>Usuario creado</DialogTitle>
             <DialogDescription>
-              Tu cuenta fue creada correctamente. Ahora puedes iniciar sesión con tu email y contraseña.
+              Tu cuenta fue creada correctamente. Ahora puedes iniciar sesion con tu email y contrasena.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

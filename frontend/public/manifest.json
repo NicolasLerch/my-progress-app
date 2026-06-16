@@ -1,6 +1,6 @@
 {
-  "name": "My Progress",
-  "short_name": "Progress",
+  "name": "My Muscle App",
+  "short_name": "My Muscle App",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111111",

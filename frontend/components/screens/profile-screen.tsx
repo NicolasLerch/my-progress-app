@@ -227,7 +227,7 @@ export function ProfileScreen() {
 
       {/* App Version */}
       <p className="text-center text-xs text-muted-foreground">
-        My Progress v1.0.0
+        My Muscle App v1.0.0
       </p>
     </div>
   )
