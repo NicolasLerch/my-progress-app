@@ -57,8 +57,15 @@ function isPlanlessSession(session: WorkoutSessionDTO | null) {
 
 function formatElapsedTime(startedAt: string, now: number) {
   const totalSeconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor(totalSeconds / 60)
+  const remainingMinutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, "0")}:${remainingMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
 
@@ -294,16 +301,25 @@ export default function TrainingCurrentPage() {
   }
 
   async function flushQueue(sessionId: string) {
-    if (!navigator.onLine) return
     const operations = await listSetOperations(sessionId)
+    if (operations.length === 0) {
+      return true
+    }
+
+    if (!navigator.onLine) {
+      return false
+    }
+
     for (const operation of operations) {
       try {
         await api.upsertWorkoutSet(operation.sessionId, operation.workoutExerciseId, operation.payload)
         await removeSetOperation(operation.id)
       } catch {
-        return
+        return false
       }
     }
+
+    return true
   }
 
   async function saveSet(workoutExerciseId: string) {
@@ -433,6 +449,11 @@ export default function TrainingCurrentPage() {
     setCompletingWorkout(true)
 
     try {
+      const synced = await flushQueue(session.id)
+      if (!synced) {
+        throw new Error("Todavia hay series pendientes de sincronizar. Espera un momento e intenta nuevamente.")
+      }
+
       const completed = await api.completeWorkoutSession(session.id)
       setSession(completed)
       setCompletedSessionId(completed.id)
