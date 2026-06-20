@@ -487,7 +487,7 @@ export default function TrainingCurrentPage() {
     } catch (cause) {
       toast({
         variant: "destructive",
-        title: "No se pudo cancelar la sesion",
+        title: "No se pudo cancelar la sesión",
         description: cause instanceof Error ? cause.message : "Ocurrio un error inesperado.",
       })
     } finally {
@@ -496,7 +496,7 @@ export default function TrainingCurrentPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   if (!home) {
@@ -551,6 +551,7 @@ export default function TrainingCurrentPage() {
   }
 
   const planless = isPlanlessSession(session)
+  const sessionDayName = planless && session.dayName === "Sesion sin plan" ? "Entrenamiento libre" : session.dayName
 
   return (
     <>
@@ -558,8 +559,8 @@ export default function TrainingCurrentPage() {
         <div className="rounded-3xl border border-primary/20 bg-linear-to-br from-primary/12 via-card to-card p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary/80">Sesion en curso</p>
-              <h1 className="mt-1 text-2xl font-bold">{session.dayName}</h1>
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary/80">Sesión en curso</p>
+              <h1 className="mt-1 text-2xl font-bold">{sessionDayName}</h1>
               <p className="text-sm text-muted-foreground">
                 {session.planName} · {totalCompletedSets} series guardadas {pending ? "· sincronizando..." : ""}
               </p>
@@ -648,7 +649,7 @@ export default function TrainingCurrentPage() {
             <CardContent className="p-4 flex flex-col gap-3">
               <div>
                 <h2 className="font-semibold">Agregar ejercicio</h2>
-                <p className="text-xs text-muted-foreground">Suma ejercicios a esta sesion libre antes o durante el entrenamiento.</p>
+                <p className="text-xs text-muted-foreground">Suma ejercicios a este entrenamiento libre antes o durante el entrenamiento.</p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="min-w-0 flex-1">
@@ -687,7 +688,7 @@ export default function TrainingCurrentPage() {
             onClick={() => setConfirmCancelOpen(true)}
             disabled={completingWorkout || cancellingWorkout}
           >
-            Cancelar sesion
+            Cancelar sesión
           </Button>
         </div>
       </div>
@@ -697,7 +698,7 @@ export default function TrainingCurrentPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Finalizar entrenamiento</AlertDialogTitle>
             <AlertDialogDescription>
-              Se cerrara la sesion actual, se limpiara el cache local de esta sesion y podras ver el resumen del dia.
+              Se cerrará la sesión actual, se limpiará el cache local de esta sesión y podrás ver el resumen del día.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -712,9 +713,9 @@ export default function TrainingCurrentPage() {
       <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar sesion</AlertDialogTitle>
+            <AlertDialogTitle>Cancelar sesión</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta accion descarta la sesion y borra su cache local. Si quieres seguir luego, usa "Salir y continuar luego".
+              Esta acción descarta la sesión y borra su cache local. Si quieres seguir luego, usa "Salir y continuar luego".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -745,8 +746,8 @@ export default function TrainingCurrentPage() {
             <DialogTitle>Cambiar ejercicio del plan</DialogTitle>
             <DialogDescription>
               {exerciseToReplace
-                ? `Este cambio solo afecta la sesion actual. Reemplazaras ${exerciseToReplace.exerciseName}.`
-                : "Selecciona el ejercicio que vas a hacer en esta sesion."}
+                ? `Este cambio solo afecta la sesión actual. Reemplazarás ${exerciseToReplace.exerciseName}.`
+                : "Selecciona el ejercicio que vas a hacer en esta sesión."}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -782,7 +783,7 @@ export default function TrainingCurrentPage() {
           <DialogHeader>
             <DialogTitle>Entrenamiento finalizado</DialogTitle>
             <DialogDescription>
-              La sesion se guardo correctamente y el cache local de esta sesion fue eliminado.
+              La sesión se guardó correctamente y el cache local de esta sesión fue eliminado.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -840,7 +841,7 @@ function ExerciseCard({
   return (
     <Card
       className={cn(
-        "overflow-hidden border-border/60 bg-card transition-all duration-200",
+        "overflow-hidden border-border/70 bg-card transition-all duration-200",
         completed && "border-primary/30 bg-primary/5",
       )}
     >
@@ -852,7 +853,7 @@ function ExerciseCard({
           <div
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
-              completed ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
+              completed ? "bg-primary text-primary-foreground" : "bg-secondary/90 text-muted-foreground",
             )}
           >
             {completed ? <Check className="size-4" /> : exerciseIndex + 1}
@@ -862,7 +863,7 @@ function ExerciseCard({
             <div className="flex flex-wrap items-center gap-2">
               <p className={cn("font-medium", completed && "text-primary")}>{exercise.exerciseName}</p>
               {exercise.isReplacement ? (
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                <span className="rounded-full bg-secondary/90 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                   Reemplazo del plan
                 </span>
               ) : null}
@@ -949,7 +950,7 @@ function ExerciseCard({
                       placeholder={exercise.sets.at(-1)?.weight?.toString() ?? "0"}
                       value={isEditableRow ? state.weight : savedSet ? String(savedSet.weight) : ""}
                       onChange={(event) => onDraftChange("weight", event.target.value)}
-                      className="h-10 border-0 bg-secondary text-center font-medium"
+                      className="h-10 border-0 bg-secondary/90 text-center font-medium"
                       disabled={!isEditableRow}
                     />
 
@@ -959,14 +960,14 @@ function ExerciseCard({
                       placeholder={exercise.targetReps}
                       value={isEditableRow ? state.reps : savedSet ? String(savedSet.reps) : ""}
                       onChange={(event) => onDraftChange("reps", event.target.value)}
-                      className="h-10 border-0 bg-secondary text-center font-medium"
+                      className="h-10 border-0 bg-secondary/90 text-center font-medium"
                       disabled={!isEditableRow}
                     />
 
                     {savedSet && !isEditingSavedSet ? (
                       <button
                         onClick={() => onStartEdit(setNumber)}
-                        className="flex h-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:bg-primary/20 hover:text-primary"
+                        className="flex h-10 items-center justify-center rounded-lg bg-secondary/90 text-muted-foreground transition-colors hover:bg-primary/20 hover:text-primary"
                         aria-label={`Editar serie ${setNumber}`}
                       >
                         <Pencil className="size-4" />
@@ -977,8 +978,8 @@ function ExerciseCard({
                         className={cn(
                           "flex h-10 items-center justify-center rounded-lg transition-colors",
                           state.weight && state.reps
-                            ? "bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary"
-                            : "bg-secondary/60 text-muted-foreground/50",
+                            ? "bg-secondary/90 text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                            : "bg-secondary/70 text-muted-foreground/50",
                         )}
                         disabled={!state.weight || !state.reps}
                       >
@@ -990,22 +991,22 @@ function ExerciseCard({
                         className={cn(
                           "flex h-10 items-center justify-center rounded-lg transition-colors",
                           state.weight && state.reps
-                            ? "bg-secondary text-muted-foreground hover:bg-primary/20 hover:text-primary"
-                            : "bg-secondary/60 text-muted-foreground/50",
+                            ? "bg-secondary/90 text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                            : "bg-secondary/70 text-muted-foreground/50",
                         )}
                         disabled={!state.weight || !state.reps}
                       >
                         <Check className="size-4" />
                       </button>
                     ) : (
-                      <div className="h-10 rounded-lg bg-secondary/40" />
+                      <div className="h-10 rounded-lg bg-secondary/70" />
                     )}
                   </div>
                 )
               })}
             </div>
 
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-secondary/50 p-2.5">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/65 p-2.5">
               <Clock className="size-4 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
                 Descanso recomendado: <span className="font-medium text-foreground">{exercise.restSeconds}s</span>

@@ -24,11 +24,11 @@ export default function HistoryDetailPage() {
   }, [authSession])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   if (!session) {
-    return <p className="text-sm text-muted-foreground">Cargando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Cargando sesión...</p>
   }
 
   return (
