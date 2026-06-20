@@ -24,6 +24,14 @@ function isPlanlessSession(session?: HomeTodayDTO["currentSession"]) {
   return Boolean(session && !session.planId)
 }
 
+function getSessionDisplayDayName(session: HomeTodayDTO["currentSession"]) {
+  if (session && !session.planId && session.dayName === "Sesion sin plan") {
+    return "Entrenamiento libre"
+  }
+
+  return session?.dayName ?? ""
+}
+
 export default function HomePage() {
   const router = useRouter()
   const { isLoading: authLoading, session, isReady } = useAuthReady()
@@ -139,7 +147,7 @@ export default function HomePage() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
           <LoaderCircle className="size-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+          <p className="text-sm text-muted-foreground">Verificando sesión...</p>
         </div>
       </div>
     )
@@ -218,7 +226,7 @@ export default function HomePage() {
               <div>
                 <p className="text-xs uppercase tracking-wider text-primary font-medium">Entrenamiento</p>
                 <h2 className="text-xl font-bold">
-                  {currentSession ? currentSession.dayName : "Sin plan para hoy"}
+                  {currentSession ? getSessionDisplayDayName(currentSession) : "Sin plan para hoy"}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {currentSession
@@ -256,7 +264,7 @@ export default function HomePage() {
                     <Dumbbell className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{session.dayName}</p>
+                    <p className="text-sm font-medium">{getSessionDisplayDayName(session)}</p>
                     <p className="text-xs text-muted-foreground">{formatShortDate(session.date)} · {session.exercises.length} ejercicios</p>
                   </div>
                   <div className="text-right">
@@ -301,7 +309,7 @@ export default function HomePage() {
             <>
               <DialogHeader>
                 <DialogTitle>Iniciar entrenamiento</DialogTitle>
-                <DialogDescription>Elige si quieres seguir tu plan actual o registrar una sesion libre.</DialogDescription>
+                <DialogDescription>Elige si quieres seguir tu plan actual o registrar un entrenamiento libre.</DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-3">
                 <div className="rounded-xl border border-border/50 bg-secondary/20 p-3">
@@ -340,7 +348,7 @@ export default function HomePage() {
             <>
               <DialogHeader>
                 <DialogTitle>Iniciar entrenamiento</DialogTitle>
-                <DialogDescription>Sin plan activo, puedes crear uno nuevo o registrar una sesion libre.</DialogDescription>
+                <DialogDescription>Sin plan activo, puedes crear uno nuevo o registrar un entrenamiento libre.</DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" onClick={startPlanlessWorkout} disabled={Boolean(starting)}>

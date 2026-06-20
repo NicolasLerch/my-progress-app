@@ -13,7 +13,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <LoaderCircle className="size-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Cargando sesion...</p>
+          <p className="text-sm text-muted-foreground">Cargando sesión...</p>
         </div>
       </div>
     )

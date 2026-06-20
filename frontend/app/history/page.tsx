@@ -24,7 +24,7 @@ export default function HistoryPage() {
   }, [session])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   return (

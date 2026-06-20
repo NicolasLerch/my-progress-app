@@ -146,6 +146,9 @@ export function PlanForm({
   initialPlan,
   onSubmit,
 }: PlanFormProps) {
+  const planInputClassName =
+    'border-border/70 bg-secondary/75 text-foreground placeholder:text-muted-foreground shadow-none'
+
   const [name, setName] = useState(initialPlan?.name ?? 'Nuevo plan')
   const [days, setDays] = useState<DayForm[]>(initialPlan ? mapPlanToForm(initialPlan).days : [createDayForm(0)])
   const [saving, setSaving] = useState(false)
@@ -297,6 +300,7 @@ export function PlanForm({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Ej: Hipertrofia 4 dias"
+              className={planInputClassName}
             />
           </div>
         </CardContent>
@@ -305,7 +309,7 @@ export function PlanForm({
       {isLoading ? (
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+            <p className="text-sm text-muted-foreground">Verificando sesión...</p>
           </CardContent>
         </Card>
       ) : null}
@@ -343,7 +347,7 @@ export function PlanForm({
                       }))
                     }
                     placeholder={`Dia ${dayIndex + 1}`}
-                    className="mt-2"
+                    className={`mt-2 ${planInputClassName}`}
                   />
                 </div>
                 <div className="flex items-center gap-1 pt-6">
@@ -382,7 +386,7 @@ export function PlanForm({
 
               <div className="flex flex-col gap-3">
                 {day.exercises.map((exercise, exerciseIndex) => (
-                  <div key={exercise.id} className="rounded-2xl border border-border/60 bg-secondary/20 p-3">
+                  <div key={exercise.id} className="rounded-2xl border border-border/70 bg-secondary/40 p-3">
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <p className="text-sm font-medium">Ejercicio {exerciseIndex + 1}</p>
                       <Button
@@ -437,6 +441,7 @@ export function PlanForm({
                                 targetSets: event.target.value,
                               }))
                             }
+                            className={planInputClassName}
                           />
                         </div>
                         <div className="flex flex-col gap-2">
@@ -452,6 +457,7 @@ export function PlanForm({
                               }))
                             }
                             placeholder="8 a 12"
+                            className={planInputClassName}
                           />
                         </div>
                         <div className="flex flex-col gap-2">
@@ -467,6 +473,7 @@ export function PlanForm({
                                 restSeconds: event.target.value,
                               }))
                             }
+                            className={planInputClassName}
                           />
                         </div>
                       </div>

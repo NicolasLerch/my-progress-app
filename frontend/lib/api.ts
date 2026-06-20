@@ -55,7 +55,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } = await supabase.auth.getSession()
 
   if (!session?.access_token) {
-    throw new Error("No hay una sesion activa.")
+    throw new Error("No hay una sesión activa.")
   }
 
   headers.set("Authorization", `Bearer ${session.access_token}`)

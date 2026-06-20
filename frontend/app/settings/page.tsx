@@ -126,12 +126,12 @@ export default function SettingsPage() {
     const trimmedConfirmPassword = confirmPassword.trim()
 
     if (!trimmedPassword || !trimmedConfirmPassword) {
-      setPasswordError("Completa ambos campos para cambiar la contrasena.")
+      setPasswordError("Completa ambos campos para cambiar la contraseña.")
       return
     }
 
     if (trimmedPassword !== trimmedConfirmPassword) {
-      setPasswordError("Las contrasenas no coinciden.")
+      setPasswordError("Las contraseñas no coinciden.")
       return
     }
 
@@ -142,15 +142,15 @@ export default function SettingsPage() {
       await updatePassword(trimmedPassword)
       toast({
         title: "Contrasena actualizada",
-        description: "Tu contrasena se actualizo correctamente.",
+        description: "Tu contraseña se actualizó correctamente.",
       })
       handlePasswordDialogChange(false)
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "No se pudo actualizar la contrasena."
+      const message = cause instanceof Error ? cause.message : "No se pudo actualizar la contraseña."
       setPasswordError(message)
       toast({
         variant: "destructive",
-        title: "No se pudo cambiar la contrasena",
+        title: "No se pudo cambiar la contraseña",
         description: message,
       })
     } finally {
@@ -344,7 +344,7 @@ export default function SettingsPage() {
                     <KeyRound className="size-4 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Cambiar contrasena</p>
+                    <p className="text-sm font-medium text-foreground">Cambiar contraseña</p>
                     <p className="text-xs text-muted-foreground">Actualiza el acceso de tu cuenta</p>
                   </div>
                 </div>
@@ -359,8 +359,8 @@ export default function SettingsPage() {
                   <LogOut className="size-4 text-destructive" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-destructive">Cerrar sesion</p>
-                  <p className="text-xs text-muted-foreground">Finaliza la sesion en este dispositivo</p>
+                  <p className="text-sm font-medium text-destructive">Cerrar sesión</p>
+                  <p className="text-xs text-muted-foreground">Finaliza la sesión en este dispositivo</p>
                 </div>
               </button>
             </CardContent>
@@ -373,13 +373,13 @@ export default function SettingsPage() {
       <Dialog open={passwordDialogOpen} onOpenChange={handlePasswordDialogChange}>
         <DialogContent showCloseButton={!isUpdatingPassword}>
           <DialogHeader>
-            <DialogTitle>Cambiar contrasena</DialogTitle>
-            <DialogDescription>Introduce tu nueva contrasena y confirma el cambio.</DialogDescription>
+            <DialogTitle>Cambiar contraseña</DialogTitle>
+            <DialogDescription>Introduce tu nueva contraseña y confirma el cambio.</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="new-password">Nueva contrasena</Label>
+              <Label htmlFor="new-password">Nueva contraseña</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -391,7 +391,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="confirm-password">Confirmar contrasena</Label>
+              <Label htmlFor="confirm-password">Confirmar contraseña</Label>
               <Input
                 id="confirm-password"
                 type="password"
@@ -410,7 +410,7 @@ export default function SettingsPage() {
               Cancelar
             </Button>
             <Button onClick={() => void handlePasswordSubmit()} disabled={isUpdatingPassword}>
-              {isUpdatingPassword ? "Guardando..." : "Guardar contrasena"}
+              {isUpdatingPassword ? "Guardando..." : "Guardar contraseña"}
             </Button>
           </DialogFooter>
         </DialogContent>
