@@ -169,7 +169,7 @@ export function AuthScreen() {
                     <Input id="signup-email" name="email" type="email" autoComplete="email" required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="signup-password">Contrasena</Label>
+                    <Label htmlFor="signup-password">Contraseña</Label>
                     <div className="relative">
                       <Input
                         id="signup-password"
