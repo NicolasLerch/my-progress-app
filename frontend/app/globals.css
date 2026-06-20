@@ -7,9 +7,9 @@
   /* Dark theme as default for fitness app */
   --background: oklch(0.08 0 0);
   --foreground: oklch(0.98 0 0);
-  --card: oklch(0.12 0 0);
+  --card: oklch(0.165 0 0);
   --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.12 0 0);
+  --popover: oklch(0.165 0 0);
   --popover-foreground: oklch(0.98 0 0);
   /* Orange accent as primary */
   --primary: oklch(0.7 0.18 50);
@@ -22,7 +22,7 @@
   --accent-foreground: oklch(0.12 0 0);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.22 0 0);
+  --border: oklch(0.28 0 0);
   --input: oklch(0.18 0 0);
   --ring: oklch(0.7 0.18 50);
   /* Charts - orange gradient palette */
@@ -45,9 +45,9 @@
 .dark {
   --background: oklch(0.08 0 0);
   --foreground: oklch(0.98 0 0);
-  --card: oklch(0.12 0 0);
+  --card: oklch(0.165 0 0);
   --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.12 0 0);
+  --popover: oklch(0.165 0 0);
   --popover-foreground: oklch(0.98 0 0);
   --primary: oklch(0.7 0.18 50);
   --primary-foreground: oklch(0.12 0 0);
@@ -59,7 +59,7 @@
   --accent-foreground: oklch(0.12 0 0);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.22 0 0);
+  --border: oklch(0.28 0 0);
   --input: oklch(0.18 0 0);
   --ring: oklch(0.7 0.18 50);
   --chart-1: oklch(0.7 0.18 50);

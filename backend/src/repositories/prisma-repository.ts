@@ -608,7 +608,7 @@ export class PrismaRepository {
           status: "in_progress",
           startedAt: new Date(input.date),
           planName: "Entrenamiento libre",
-          dayName: "Sesion sin plan",
+          dayName: "Entrenamiento libre",
         },
         include: workoutSessionInclude,
       })

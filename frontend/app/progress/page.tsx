@@ -44,7 +44,7 @@ export default function ProgressPage() {
   )
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   return (

@@ -96,14 +96,14 @@ export function AuthScreen() {
               <div className="space-y-1">
                 <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">My Muscle App</p>
                 <CardTitle className="text-2xl">Accede a tu progreso</CardTitle>
-                <CardDescription>Inicia sesion o crea tu cuenta para sincronizar planes y entrenamientos.</CardDescription>
+                <CardDescription>Inicia sesión o crea tu cuenta para sincronizar planes y entrenamientos.</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "login" | "signup")} className="gap-4">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Iniciar sesion</TabsTrigger>
+                <TabsTrigger value="login">Iniciar sesión</TabsTrigger>
                 <TabsTrigger value="signup">Crear cuenta</TabsTrigger>
               </TabsList>
 
@@ -130,7 +130,7 @@ export function AuthScreen() {
                         size="icon-sm"
                         className="absolute top-1/2 right-1 -translate-y-1/2"
                         onClick={() => setLoginPasswordVisible((current) => !current)}
-                        aria-label={loginPasswordVisible ? "Ocultar contrasena" : "Mostrar contrasena"}
+                        aria-label={loginPasswordVisible ? "Ocultar contraseña" : "Mostrar contraseña"}
                       >
                         {loginPasswordVisible ? <EyeOff /> : <Eye />}
                       </Button>
@@ -169,7 +169,7 @@ export function AuthScreen() {
                     <Input id="signup-email" name="email" type="email" autoComplete="email" required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="signup-password">Contrasena</Label>
+                    <Label htmlFor="signup-password">Contraseña</Label>
                     <div className="relative">
                       <Input
                         id="signup-password"
@@ -186,7 +186,7 @@ export function AuthScreen() {
                         size="icon-sm"
                         className="absolute top-1/2 right-1 -translate-y-1/2"
                         onClick={() => setSignupPasswordVisible((current) => !current)}
-                        aria-label={signupPasswordVisible ? "Ocultar contrasena" : "Mostrar contrasena"}
+                        aria-label={signupPasswordVisible ? "Ocultar contraseña" : "Mostrar contraseña"}
                       >
                         {signupPasswordVisible ? <EyeOff /> : <Eye />}
                       </Button>
@@ -215,7 +215,7 @@ export function AuthScreen() {
           <DialogHeader>
             <DialogTitle>Usuario creado</DialogTitle>
             <DialogDescription>
-              Tu cuenta fue creada correctamente. Ahora puedes iniciar sesion con tu email y contrasena.
+              Tu cuenta fue creada correctamente. Ahora puedes iniciar sesión con tu email y contraseña.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -225,7 +225,7 @@ export function AuthScreen() {
                 setActiveTab("login")
               }}
             >
-              Iniciar sesion
+              Iniciar sesión
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,6 +7,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 
+function getSessionDisplayDayName(session: WorkoutSessionDTO) {
+  if (session.planName === "Entrenamiento libre" && session.dayName === "Sesion sin plan") {
+    return "Entrenamiento libre"
+  }
+
+  return session.dayName
+}
+
 export default function HistoryDetailPage() {
   const params = useParams<{ id: string }>()
   const [session, setSession] = useState<WorkoutSessionDTO | null>(null)
@@ -24,17 +32,17 @@ export default function HistoryDetailPage() {
   }, [authSession])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   if (!session) {
-    return <p className="text-sm text-muted-foreground">Cargando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Cargando sesión...</p>
   }
 
   return (
     <div className="flex flex-col gap-4 pb-4">
       <div>
-        <h1 className="text-xl font-bold">{session.dayName}</h1>
+        <h1 className="text-xl font-bold">{getSessionDisplayDayName(session)}</h1>
         <p className="text-sm text-muted-foreground">{new Date(session.date).toLocaleDateString("es-AR")} · {session.planName}</p>
       </div>
       {session.exercises.map((exercise) => (

@@ -8,6 +8,14 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 import { formatShortDate, formatWeight } from "@/lib/format"
 
+function getHistoryDisplayDayName(item: HistoryItemDTO) {
+  if (item.planName === "Entrenamiento libre" && item.dayName === "Sesion sin plan") {
+    return "Entrenamiento libre"
+  }
+
+  return item.dayName
+}
+
 export default function HistoryPage() {
   const [items, setItems] = useState<HistoryItemDTO[]>([])
   const { isLoading, isReady, session } = useAuthReady()
@@ -24,7 +32,7 @@ export default function HistoryPage() {
   }, [session])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesion...</p>
+    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
   }
 
   return (
@@ -38,7 +46,7 @@ export default function HistoryPage() {
           <Card>
             <CardContent className="p-4 flex items-center justify-between gap-3">
               <div>
-                <p className="font-medium">{item.dayName}</p>
+                <p className="font-medium">{getHistoryDisplayDayName(item)}</p>
                 <p className="text-xs text-muted-foreground">{formatShortDate(item.date)} · {item.exerciseCount} ejercicios · {item.durationMinutes} min</p>
               </div>
               <div className="text-right">
