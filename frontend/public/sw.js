@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-progress-static-v3"
+const CACHE_NAME = "my-progress-static-v4"
 const STATIC_ASSETS = ["/manifest.json", "/gym-near-svgrepo-com.svg", "/apple-icon.png"]
 
 self.addEventListener("install", (event) => {
@@ -33,5 +33,28 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => cached ?? fetch(event.request)),
+  )
+})
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close()
+
+  const sessionId = event.notification.data?.sessionId
+  const targetUrl = new URL("/training/current", self.location.origin)
+
+  if (event.action === "complete" && sessionId) {
+    targetUrl.searchParams.set("completeSession", sessionId)
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+      const client = clients[0]
+      if (client) {
+        await client.navigate(targetUrl.href)
+        return client.focus()
+      }
+
+      return self.clients.openWindow(targetUrl.href)
+    }),
   )
 })

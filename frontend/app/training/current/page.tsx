@@ -1,8 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, ChevronUp, Clock, History, Pencil, RefreshCcw } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Check, ChevronDown, ChevronUp, Clock, History, Pause, Pencil, Play, RefreshCcw } from "lucide-react"
 import type { ExerciseDTO, HomeTodayDTO, WorkoutExerciseDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { api } from "@/lib/api"
@@ -43,12 +43,22 @@ import { Input } from "@/components/ui/input"
 import { toast } from "@/hooks/use-toast"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { cn } from "@/lib/utils"
+import {
+  closeActiveWorkoutNotification,
+  getNotificationPermission,
+  requestWorkoutNotificationPermission,
+  showActiveWorkoutNotification,
+} from "@/lib/workout-session-notification"
 
 type ExerciseUiState = TrainingDraftExerciseState
 type PreviousPerformance = {
   weight: number
   reps: number
   date: string
+}
+type RestTimerState = {
+  startedAt: number
+  pausedAt?: number
 }
 
 function isPlanlessSession(session: WorkoutSessionDTO | null) {
@@ -65,6 +75,13 @@ function formatElapsedTime(startedAt: string, now: number) {
   if (hours > 0) {
     return `${hours.toString().padStart(2, "0")}:${remainingMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
   }
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
+function formatTimerSeconds(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
 
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
@@ -90,6 +107,47 @@ function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
   }, {})
 }
 
+function mergeExerciseSets(currentExercise: WorkoutExerciseDTO, incomingExercise: WorkoutExerciseDTO) {
+  const setsByNumber = new Map(incomingExercise.sets.map((set) => [set.setNumber, set]))
+
+  currentExercise.sets.forEach((currentSet) => {
+    const incomingSet = setsByNumber.get(currentSet.setNumber)
+    if (!incomingSet) {
+      setsByNumber.set(currentSet.setNumber, currentSet)
+      return
+    }
+
+    if (new Date(currentSet.updatedAt).getTime() > new Date(incomingSet.updatedAt).getTime()) {
+      setsByNumber.set(currentSet.setNumber, currentSet)
+    }
+  })
+
+  return Array.from(setsByNumber.values()).sort((left, right) => left.setNumber - right.setNumber)
+}
+
+function mergeWorkoutSessionState(current: WorkoutSessionDTO | null, incoming: WorkoutSessionDTO) {
+  if (!current || current.id !== incoming.id) {
+    return incoming
+  }
+
+  const currentExercisesById = new Map(current.exercises.map((exercise) => [exercise.id, exercise]))
+
+  return {
+    ...incoming,
+    exercises: incoming.exercises.map((incomingExercise) => {
+      const currentExercise = currentExercisesById.get(incomingExercise.id)
+      if (!currentExercise) {
+        return incomingExercise
+      }
+
+      return {
+        ...incomingExercise,
+        sets: mergeExerciseSets(currentExercise, incomingExercise),
+      }
+    }),
+  }
+}
+
 export default function TrainingCurrentPage() {
   const router = useRouter()
   const { isLoading, isReady, session: authSession } = useAuthReady()
@@ -110,7 +168,33 @@ export default function TrainingCurrentPage() {
   const [completingWorkout, setCompletingWorkout] = useState(false)
   const [cancellingWorkout, setCancellingWorkout] = useState(false)
   const [exerciseUiState, setExerciseUiState] = useState<Record<string, ExerciseUiState>>({})
+  const [restTimers, setRestTimers] = useState<Record<string, RestTimerState>>({})
   const [clockNow, setClockNow] = useState(() => Date.now())
+  const [workoutNotificationPermission, setWorkoutNotificationPermission] = useState<NotificationPermission | "unsupported">("default")
+  const sessionRef = useRef<WorkoutSessionDTO | null>(null)
+  const pendingSyncCountRef = useRef(0)
+  const notificationCompletionSessionRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  useEffect(() => {
+    setWorkoutNotificationPermission(getNotificationPermission())
+  }, [])
+
+  useEffect(() => {
+    if (!session) {
+      return
+    }
+
+    if (session.status === "in_progress" && workoutNotificationPermission === "granted") {
+      void showActiveWorkoutNotification(session).catch(() => {})
+      return
+    }
+
+    void closeActiveWorkoutNotification(session.id).catch(() => {})
+  }, [session, workoutNotificationPermission])
 
   useEffect(() => {
     if (!isReady) return
@@ -134,12 +218,14 @@ export default function TrainingCurrentPage() {
       setExerciseToReplace(null)
       setSelectedPlanDayId("")
       setExerciseUiState({})
+      setRestTimers({})
     }
   }, [authSession])
 
   useEffect(() => {
     if (!session) {
       setExerciseUiState({})
+      setRestTimers({})
       return
     }
 
@@ -250,6 +336,45 @@ export default function TrainingCurrentPage() {
       void persistExerciseUiState(nextState)
       return nextState
     })
+  }
+
+  function startRestTimer(workoutExerciseId: string) {
+    setRestTimers((currentTimers) => ({
+      ...currentTimers,
+      [workoutExerciseId]: { startedAt: Date.now() },
+    }))
+  }
+
+  function toggleRestTimer(workoutExerciseId: string) {
+    setRestTimers((currentTimers) => {
+      const timer = currentTimers[workoutExerciseId]
+      if (!timer) {
+        return currentTimers
+      }
+
+      if (timer.pausedAt) {
+        const pausedDuration = Date.now() - timer.pausedAt
+        return {
+          ...currentTimers,
+          [workoutExerciseId]: {
+            startedAt: timer.startedAt + pausedDuration,
+          },
+        }
+      }
+
+      return {
+        ...currentTimers,
+        [workoutExerciseId]: {
+          ...timer,
+          pausedAt: Date.now(),
+        },
+      }
+    })
+  }
+
+  async function enableWorkoutNotifications() {
+    const permission = await requestWorkoutNotificationPermission()
+    setWorkoutNotificationPermission(permission)
   }
 
   async function startWorkout(planDayId?: string) {
@@ -391,23 +516,29 @@ export default function TrainingCurrentPage() {
 
     setSession(nextSession)
     setExerciseUiState(nextExerciseState)
+    if (!editingSetNumber) {
+      startRestTimer(workoutExerciseId)
+    }
     await saveSessionSnapshot(nextSession)
     await saveTrainingDraft({
       id: session.id,
       exercises: nextExerciseState,
     })
     await queueSetOperation(session.id, workoutExerciseId, payload)
+    pendingSyncCountRef.current += 1
     setPending(true)
 
     try {
       const synced = await api.upsertWorkoutSet(session.id, workoutExerciseId, payload)
-      await saveSessionSnapshot(synced)
-      setSession(synced)
+      const mergedSession = mergeWorkoutSessionState(sessionRef.current, synced)
+      await saveSessionSnapshot(mergedSession)
+      setSession(mergedSession)
       await removeSetOperation(`${session.id}-${workoutExerciseId}-${setNumber}`)
     } catch {
       // Keep the queued operation to retry later when connectivity is restored.
     } finally {
-      setPending(false)
+      pendingSyncCountRef.current = Math.max(0, pendingSyncCountRef.current - 1)
+      setPending(pendingSyncCountRef.current > 0)
     }
   }
 
@@ -455,6 +586,7 @@ export default function TrainingCurrentPage() {
       }
 
       const completed = await api.completeWorkoutSession(session.id)
+      await closeActiveWorkoutNotification(session.id)
       setSession(completed)
       setCompletedSessionId(completed.id)
       setCompletedDialogOpen(true)
@@ -479,6 +611,7 @@ export default function TrainingCurrentPage() {
 
     try {
       await api.updateWorkoutSession(session.id, { status: "abandoned" })
+      await closeActiveWorkoutNotification(session.id)
       await deleteSessionSnapshot(session.id)
       await deleteTrainingDraft(session.id)
       await clearSessionSetOperations(session.id)
@@ -494,6 +627,23 @@ export default function TrainingCurrentPage() {
       setCancellingWorkout(false)
     }
   }
+
+  useEffect(() => {
+    if (!session || session.status !== "in_progress" || typeof window === "undefined") {
+      return
+    }
+
+    const requestedSessionId = new URLSearchParams(window.location.search).get("completeSession")
+    if (requestedSessionId !== session.id || notificationCompletionSessionRef.current === session.id) {
+      return
+    }
+
+    notificationCompletionSessionRef.current = session.id
+    const url = new URL(window.location.href)
+    url.searchParams.delete("completeSession")
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`)
+    void completeWorkout()
+  }, [session?.id, session?.status])
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
@@ -581,6 +731,19 @@ export default function TrainingCurrentPage() {
               {completedExercises}/{session.exercises.length}
             </span>
           </div>
+
+          {workoutNotificationPermission === "default" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void enableWorkoutNotifications()}
+              className="mt-3 -ml-2 text-xs text-primary hover:text-primary"
+            >
+              <Clock className="size-3.5" />
+              Activar recordatorio de entrenamiento
+            </Button>
+          ) : null}
         </div>
 
         {session.exercises.length === 0 ? (
@@ -639,6 +802,9 @@ export default function TrainingCurrentPage() {
                 }
                 onSave={() => saveSet(exercise.id)}
                 onReplace={!planless && exercise.sets.length === 0 ? () => openReplaceDialog(exercise) : undefined}
+                restTimer={restTimers[exercise.id]}
+                now={clockNow}
+                onToggleRestTimer={() => toggleRestTimer(exercise.id)}
               />
             ))}
           </div>
@@ -823,6 +989,9 @@ function ExerciseCard({
   onCancelEdit,
   onSave,
   onReplace,
+  restTimer,
+  now,
+  onToggleRestTimer,
 }: {
   exercise: WorkoutExerciseDTO
   exerciseIndex: number
@@ -834,9 +1003,18 @@ function ExerciseCard({
   onCancelEdit: () => void
   onSave: () => Promise<void>
   onReplace?: () => void
+  restTimer?: RestTimerState
+  now: number
+  onToggleRestTimer: () => void
 }) {
   const completed = getExerciseCompletion(exercise)
   const displayRowCount = Math.max(exercise.targetSets, exercise.sets.length + 1)
+  const timerReference = restTimer?.pausedAt ?? now
+  const elapsedRestSeconds = restTimer
+    ? Math.max(0, Math.floor((timerReference - restTimer.startedAt) / 1000))
+    : 0
+  const remainingRestSeconds = Math.max(0, exercise.restSeconds - elapsedRestSeconds)
+  const overtimeSeconds = Math.max(0, elapsedRestSeconds - exercise.restSeconds)
 
   return (
     <Card
@@ -1007,10 +1185,43 @@ function ExerciseCard({
             </div>
 
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/65 p-2.5">
-              <Clock className="size-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">
-                Descanso recomendado: <span className="font-medium text-foreground">{exercise.restSeconds}s</span>
-              </span>
+              <Clock className={cn("size-4", restTimer ? "text-primary" : "text-muted-foreground")} />
+              <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+                {restTimer ? (
+                  <>
+                    <p className="font-medium text-foreground">
+                      {exercise.restSeconds === 0
+                        ? `Cronómetro ${formatTimerSeconds(elapsedRestSeconds)}`
+                        : remainingRestSeconds > 0
+                          ? `Pausa ${formatTimerSeconds(remainingRestSeconds)}`
+                          : `Pausa +${formatTimerSeconds(overtimeSeconds)}`}
+                    </p>
+                    <p>
+                      {restTimer.pausedAt
+                        ? "Temporizador pausado"
+                        : exercise.restSeconds === 0
+                          ? "Tiempo desde la última serie"
+                          : `Descanso recomendado: ${exercise.restSeconds}s`}
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    Descanso recomendado: <span className="font-medium text-foreground">{exercise.restSeconds}s</span>
+                  </p>
+                )}
+              </div>
+              {restTimer ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onToggleRestTimer}
+                  aria-label={restTimer.pausedAt ? "Reanudar temporizador" : "Pausar temporizador"}
+                  title={restTimer.pausedAt ? "Reanudar" : "Pausar"}
+                >
+                  {restTimer.pausedAt ? <Play className="size-4" /> : <Pause className="size-4" />}
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : null}
