@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import type { WorkoutSessionDTO } from "@my-progress/shared"
+import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
@@ -32,11 +33,11 @@ export default function HistoryDetailPage() {
   }, [authSession])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   if (!session) {
-    return <p className="text-sm text-muted-foreground">Cargando sesión...</p>
+    return <AppLoadingIndicator label="Cargando sesión..." />
   }
 
   return (

@@ -7,6 +7,7 @@ import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shar
 import { api } from '@/lib/api'
 import { useAuthReady } from '@/hooks/use-auth-ready'
 import { ExerciseSearchSelect } from '@/components/exercise-search-select'
+import { AppLoadingIndicator } from '@/components/app-loading-indicator'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -309,7 +310,7 @@ export function PlanForm({
       {isLoading ? (
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+            <AppLoadingIndicator compact label="Verificando sesión..." />
           </CardContent>
         </Card>
       ) : null}
