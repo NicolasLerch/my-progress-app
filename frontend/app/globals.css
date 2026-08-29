@@ -163,7 +163,9 @@
 }
 
 .app-splash {
-  position: relative;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: grid;
   min-height: 100dvh;
   place-items: center;
@@ -271,6 +273,35 @@
   animation: splash-dots 1.2s steps(4, end) infinite;
 }
 
+.app-loading-indicator {
+  display: flex;
+  min-height: 48vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-loading-indicator--compact {
+  min-height: 4rem;
+}
+
+.app-loading-indicator__mark {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border: 1px solid oklch(0.76 0.17 55 / 0.55);
+  border-radius: 999px;
+  background: linear-gradient(135deg, oklch(0.8 0.17 60), oklch(0.62 0.17 43));
+  box-shadow: 0 0 1.5rem oklch(0.7 0.18 50 / 0.24);
+  animation: app-loader-pulse 1.4s ease-in-out infinite;
+}
+
+.app-loading-indicator__mark img {
+  width: 2rem;
+  height: 2rem;
+}
+
 @keyframes splash-logo-enter {
   from { opacity: 0; transform: scale(0.72) translateY(1rem); }
   to { opacity: 1; transform: scale(1) translateY(0); }
@@ -296,6 +327,10 @@
 
 @keyframes splash-dots {
   to { clip-path: inset(0 -0.15rem 0 0); }
+}
+
+@keyframes app-loader-pulse {
+  50% { transform: scale(1.08); box-shadow: 0 0 2.25rem oklch(0.7 0.18 50 / 0.42); }
 }
 
 @media (prefers-reduced-motion: reduce) {

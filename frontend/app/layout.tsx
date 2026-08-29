@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import { AppChrome } from '@/components/app-chrome'
 import { AuthProvider } from '@/lib/auth'
 import { Toaster } from '@/components/ui/toaster'
@@ -57,7 +56,6 @@ export default function RootLayout({
           <AppChrome>{children}</AppChrome>
           <Toaster />
         </AuthProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

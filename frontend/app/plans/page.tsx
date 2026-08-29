@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Calendar, ChevronRight, Plus } from "lucide-react"
 import type { PlanDTO } from "@my-progress/shared"
+import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +27,7 @@ export default function PlansPage() {
   }, [session])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   return (

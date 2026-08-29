@@ -1,8 +1,20 @@
+"use client"
+
 import Image from "next/image"
+import { useEffect } from "react"
 
 export function AppSplashScreen({ isExiting }: { isExiting: boolean }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
+
   return (
-    <main className="app-splash" aria-live="polite" aria-label="Cargando My Muscle App">
+    <div className="app-splash" aria-live="polite" aria-label="Cargando My Muscle App">
       <div className="app-splash__halo" />
       <div className="app-splash__grid" />
       <div className="app-splash__content">
@@ -17,6 +29,6 @@ export function AppSplashScreen({ isExiting }: { isExiting: boolean }) {
           <p className="app-splash__message">Entrando en calor<span className="app-splash__dots">...</span></p>
         </div>
       </div>
-    </main>
+    </div>
   )
 }

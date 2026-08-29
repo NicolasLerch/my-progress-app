@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Pencil, Play, Trash2 } from 'lucide-react'
 import type { PlanDTO } from '@my-progress/shared'
+import { AppLoadingIndicator } from '@/components/app-loading-indicator'
 import { toast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
 import {
@@ -41,7 +42,7 @@ export default function PlanDetailPage() {
   }, [session])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   async function handleDelete() {
@@ -70,7 +71,7 @@ export default function PlanDetailPage() {
   }
 
   if (!plan) {
-    return <p className="text-sm text-muted-foreground">Cargando plan...</p>
+    return <AppLoadingIndicator label="Cargando plan..." />
   }
 
   return (
