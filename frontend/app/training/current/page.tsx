@@ -17,6 +17,7 @@ import {
   removeSetOperation,
   saveSessionSnapshot,
   saveTrainingDraft,
+  type RestTimerSnapshot,
   type TrainingDraftExerciseState,
 } from "@/lib/offline-workouts"
 import {
@@ -148,6 +149,22 @@ function mergeWorkoutSessionState(current: WorkoutSessionDTO | null, incoming: W
   }
 }
 
+function buildRestTimerState(
+  session: WorkoutSessionDTO,
+  draft?: { restTimers?: Record<string, RestTimerSnapshot> },
+) {
+  const validExerciseIds = new Set(session.exercises.map((exercise) => exercise.id))
+  const restTimers = draft?.restTimers ?? {}
+
+  return Object.entries(restTimers).reduce<Record<string, RestTimerState>>((accumulator, [workoutExerciseId, timer]) => {
+    if (validExerciseIds.has(workoutExerciseId)) {
+      accumulator[workoutExerciseId] = timer
+    }
+
+    return accumulator
+  }, {})
+}
+
 export default function TrainingCurrentPage() {
   const router = useRouter()
   const { isLoading, isReady, session: authSession } = useAuthReady()
@@ -252,6 +269,7 @@ export default function TrainingCurrentPage() {
             }, {})
           : baseState,
       )
+      setRestTimers(buildRestTimerState(currentSession, draft))
     }
 
     void loadDraft()
@@ -315,15 +333,23 @@ export default function TrainingCurrentPage() {
       }, {})
   }, [home])
 
-  async function persistExerciseUiState(nextState: Record<string, ExerciseUiState>) {
+  async function persistTrainingDraft(nextState: {
+    exercises?: Record<string, ExerciseUiState>
+    restTimers?: Record<string, RestTimerState>
+  }) {
     if (!session) {
       return
     }
 
     await saveTrainingDraft({
       id: session.id,
-      exercises: nextState,
+      exercises: nextState.exercises ?? exerciseUiState,
+      restTimers: nextState.restTimers ?? restTimers,
     })
+  }
+
+  async function persistExerciseUiState(nextState: Record<string, ExerciseUiState>) {
+    await persistTrainingDraft({ exercises: nextState })
   }
 
   function updateExerciseUi(workoutExerciseId: string, updater: (state: ExerciseUiState) => ExerciseUiState) {
@@ -339,10 +365,15 @@ export default function TrainingCurrentPage() {
   }
 
   function startRestTimer(workoutExerciseId: string) {
-    setRestTimers((currentTimers) => ({
-      ...currentTimers,
-      [workoutExerciseId]: { startedAt: Date.now() },
-    }))
+    setRestTimers((currentTimers) => {
+      const nextTimers = {
+        ...currentTimers,
+        [workoutExerciseId]: { startedAt: Date.now() },
+      }
+
+      void persistTrainingDraft({ restTimers: nextTimers })
+      return nextTimers
+    })
   }
 
   function toggleRestTimer(workoutExerciseId: string) {
@@ -352,23 +383,27 @@ export default function TrainingCurrentPage() {
         return currentTimers
       }
 
+      let nextTimers: Record<string, RestTimerState>
       if (timer.pausedAt) {
         const pausedDuration = Date.now() - timer.pausedAt
-        return {
+        nextTimers = {
           ...currentTimers,
           [workoutExerciseId]: {
             startedAt: timer.startedAt + pausedDuration,
           },
         }
+      } else {
+        nextTimers = {
+          ...currentTimers,
+          [workoutExerciseId]: {
+            ...timer,
+            pausedAt: Date.now(),
+          },
+        }
       }
 
-      return {
-        ...currentTimers,
-        [workoutExerciseId]: {
-          ...timer,
-          pausedAt: Date.now(),
-        },
-      }
+      void persistTrainingDraft({ restTimers: nextTimers })
+      return nextTimers
     })
   }
 
@@ -520,10 +555,7 @@ export default function TrainingCurrentPage() {
       startRestTimer(workoutExerciseId)
     }
     await saveSessionSnapshot(nextSession)
-    await saveTrainingDraft({
-      id: session.id,
-      exercises: nextExerciseState,
-    })
+    await persistTrainingDraft({ exercises: nextExerciseState })
     await queueSetOperation(session.id, workoutExerciseId, payload)
     pendingSyncCountRef.current += 1
     setPending(true)
@@ -1189,7 +1221,7 @@ function ExerciseCard({
               <div className="min-w-0 flex-1 text-xs text-muted-foreground">
                 {restTimer ? (
                   <>
-                    <p className="font-medium text-foreground">
+                    <p className="text-xl font-bold leading-none tabular-nums text-foreground">
                       {exercise.restSeconds === 0
                         ? `Cronómetro ${formatTimerSeconds(elapsedRestSeconds)}`
                         : remainingRestSeconds > 0
