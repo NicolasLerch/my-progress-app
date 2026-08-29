@@ -32,6 +32,10 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function isInvalidRefreshTokenError(error: unknown) {
+  return error instanceof Error && error.message.includes("Invalid Refresh Token")
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -41,37 +45,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
 
     async function bootstrapSession() {
-      const { data, error } = await supabase.auth.getSession()
-
-      if (error) {
-        console.error("Failed to load Supabase session", error)
-      }
-
-      const nextSession = data.session ?? null
-
-      if (!nextSession) {
-        if (mounted) {
-          setSession(null)
-          setIsLoading(false)
+      try {
+        const { data, error } = await supabase.auth.getSession()
+        if (error) {
+          throw error
         }
-        return
-      }
 
-      const { data: userData, error: userError } = await supabase.auth.getUser(nextSession.access_token)
+        const nextSession = data.session ?? null
+        if (!nextSession) {
+          if (mounted) {
+            setSession(null)
+          }
+          return
+        }
 
-      if (userError || !userData.user) {
+        const { data: userData, error: userError } = await supabase.auth.getUser(nextSession.access_token)
+        if (userError || !userData.user) {
+          await supabase.auth.signOut({ scope: "local" })
+
+          if (mounted) {
+            setSession(null)
+          }
+          return
+        }
+
+        if (mounted) {
+          setSession(nextSession)
+        }
+      } catch (error) {
+        if (!isInvalidRefreshTokenError(error)) {
+          console.error("Failed to load Supabase session", error)
+        }
         await supabase.auth.signOut({ scope: "local" })
 
         if (mounted) {
           setSession(null)
+        }
+      } finally {
+        if (mounted) {
           setIsLoading(false)
         }
-        return
-      }
-
-      if (mounted) {
-        setSession(nextSession)
-        setIsLoading(false)
       }
     }
 

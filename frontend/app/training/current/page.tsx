@@ -41,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { toast } from "@/hooks/use-toast"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { cn } from "@/lib/utils"
@@ -678,11 +679,11 @@ export default function TrainingCurrentPage() {
   }, [session?.id, session?.status])
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   if (!home) {
-    return <p className="text-sm text-muted-foreground">Cargando entrenamiento...</p>
+    return <AppLoadingIndicator label="Cargando entrenamiento..." />
   }
 
   if (!session) {

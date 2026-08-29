@@ -3,8 +3,9 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Calendar, ChevronRight, Dumbbell, LoaderCircle, Play, Trophy } from "lucide-react"
+import { Calendar, ChevronRight, Dumbbell, Play, Trophy } from "lucide-react"
 import type { HomeTodayDTO } from "@my-progress/shared"
+import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { api } from "@/lib/api"
 import { useAuthReady } from "@/hooks/use-auth-ready"
+import { useAppBoot } from "@/components/app-boot-provider"
 import { formatWeight, formatShortDate } from "@/lib/format"
 import { toast } from "@/hooks/use-toast"
 
@@ -34,44 +36,11 @@ function getSessionDisplayDayName(session: HomeTodayDTO["currentSession"]) {
 
 export default function HomePage() {
   const router = useRouter()
-  const { isLoading: authLoading, session, isReady } = useAuthReady()
-  const [data, setData] = useState<HomeTodayDTO | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { isLoading: authLoading, session } = useAuthReady()
+  const { homeData: data, homeError: error } = useAppBoot()
   const [startModalOpen, setStartModalOpen] = useState(false)
   const [starting, setStarting] = useState<"planned" | "planless" | null>(null)
   const [selectedPlanDayId, setSelectedPlanDayId] = useState("")
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    let cancelled = false
-    setError(null)
-
-    void api.getHome()
-      .then((payload) => {
-        if (!cancelled) {
-          setData(payload)
-        }
-      })
-      .catch((cause: Error) => {
-        if (!cancelled) {
-          setError(cause.message)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [isReady, session])
-
-  useEffect(() => {
-    if (!session) {
-      setData(null)
-      setError(null)
-    }
-  }, [session])
 
   useEffect(() => {
     if (!data?.activePlan) return
@@ -143,14 +112,7 @@ export default function HomePage() {
   }
 
   if (authLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <LoaderCircle className="size-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Verificando sesión...</p>
-        </div>
-      </div>
-    )
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   if (!session) {
@@ -158,7 +120,7 @@ export default function HomePage() {
   }
 
   if (!data) {
-    return <p className="text-sm text-muted-foreground">Cargando panel de hoy...</p>
+    return <AppLoadingIndicator label="Cargando inicio..." />
   }
 
   const hasPlanForToday = Boolean(data.activePlan && data.todayDay)

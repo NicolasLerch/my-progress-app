@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import type { ExerciseDTO, ProgressSeriesDTO } from "@my-progress/shared"
+import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuthReady } from "@/hooks/use-auth-ready"
@@ -44,7 +45,7 @@ export default function ProgressPage() {
   )
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Verificando sesión...</p>
+    return <AppLoadingIndicator label="Verificando sesión..." />
   }
 
   return (
