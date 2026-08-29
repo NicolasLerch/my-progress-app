@@ -20,9 +20,15 @@ export interface TrainingDraftExerciseState {
   editingSetNumber?: number
 }
 
+export interface RestTimerSnapshot {
+  startedAt: number
+  pausedAt?: number
+}
+
 export interface TrainingDraftSnapshot {
   id: string
   exercises: Record<string, TrainingDraftExerciseState>
+  restTimers?: Record<string, RestTimerSnapshot>
 }
 
 function openDatabase(): Promise<IDBDatabase> {

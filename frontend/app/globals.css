@@ -161,3 +161,148 @@
 .safe-top {
   padding-top: env(safe-area-inset-top, 0);
 }
+
+.app-splash {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 43%, oklch(0.32 0.1 50 / 0.38), transparent 22rem),
+    linear-gradient(145deg, oklch(0.065 0.006 50), oklch(0.105 0.012 50));
+}
+
+.app-splash__halo {
+  position: absolute;
+  z-index: -2;
+  width: min(80vw, 34rem);
+  aspect-ratio: 1;
+  border: 1px solid oklch(0.7 0.18 50 / 0.2);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2rem oklch(0.7 0.18 50 / 0.04), 0 0 7rem oklch(0.7 0.18 50 / 0.18);
+  animation: splash-halo 2.8s ease-in-out infinite;
+}
+
+.app-splash__grid {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  opacity: 0.18;
+  background-image: linear-gradient(oklch(1 0 0 / 0.06) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 0.06) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  mask-image: radial-gradient(circle at center, black, transparent 72%);
+}
+
+.app-splash__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  text-align: center;
+}
+
+.app-splash__logo {
+  position: relative;
+  display: grid;
+  width: 8.5rem;
+  aspect-ratio: 1;
+  place-items: center;
+  animation: splash-logo-enter 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  border-radius: 100%;
+}
+
+.app-splash__logo-ring {
+  position: absolute;
+  inset: -0.65rem;
+  border: 1px solid oklch(0.7 0.18 50 / 0.5);
+  border-radius: 999px;
+}
+
+.app-splash__logo-mark {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border: 1px solid oklch(0.82 0.16 55 / 0.6);
+  border-radius: 999px;
+  background: linear-gradient(135deg, oklch(0.83 0.17 60), oklch(0.61 0.17 42));
+  box-shadow: 0 1.25rem 3.5rem oklch(0.7 0.18 50 / 0.3), inset 0 1px oklch(1 0 0 / 0.35);
+}
+
+.app-splash__logo-mark img {
+  width: 4.75rem;
+  height: 4.75rem;
+}
+
+.app-splash__logo--exit {
+  animation: splash-logo-exit 650ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.app-splash__copy {
+  animation: splash-copy-enter 500ms 220ms ease-out both;
+}
+
+.app-splash__copy--exit {
+  animation: splash-copy-exit 220ms ease-in forwards;
+}
+
+.app-splash__eyebrow {
+  margin: 0 0 0.5rem;
+  color: oklch(0.77 0.14 55);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+}
+
+.app-splash__message {
+  margin: 0;
+  color: oklch(0.96 0.01 55);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app-splash__dots {
+  display: inline-block;
+  width: 1.1rem;
+  text-align: left;
+  animation: splash-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes splash-logo-enter {
+  from { opacity: 0; transform: scale(0.72) translateY(1rem); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes splash-logo-exit {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(8); }
+}
+
+@keyframes splash-copy-enter {
+  from { opacity: 0; transform: translateY(0.75rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes splash-copy-exit {
+  to { opacity: 0; transform: translateY(0.5rem); }
+}
+
+@keyframes splash-halo {
+  50% { transform: scale(1.06); opacity: 0.65; }
+}
+
+@keyframes splash-dots {
+  to { clip-path: inset(0 -0.15rem 0 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-splash *,
+  .app-splash__logo--exit,
+  .app-splash__copy--exit {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}
