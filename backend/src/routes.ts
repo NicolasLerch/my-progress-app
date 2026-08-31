@@ -88,6 +88,7 @@ export async function registerRoutes(app: FastifyInstance) {
               ? input.exercises.map((exercise) => ({
                   id: exercise.id ?? `plan-exercise-${exercise.exerciseId}`,
                   planDayId: day.id,
+                  order: exercise.order,
                   exerciseId: exercise.exerciseId,
                   exerciseName: exercise.exerciseName,
                   targetSets: exercise.targetSets,

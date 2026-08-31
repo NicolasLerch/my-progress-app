@@ -31,6 +31,7 @@ export interface ExerciseDTO {
 export interface PlanExerciseDTO {
   id: string
   planDayId: string
+  order: number
   exerciseId: string
   exerciseName: string
   targetSets: number
@@ -200,6 +201,7 @@ export interface CreatePlanInputDTO {
     name: string
     order: number
     exercises: Array<{
+      order: number
       exerciseId: string
       exerciseName: string
       targetSets: number
