@@ -179,27 +179,21 @@ function minutesBetween(startedAt: Date, completedAt: Date) {
   return Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 60000))
 }
 
-function buildExerciseSearchWhere(query?: string): PrismaNamespace.ExerciseWhereInput | undefined {
-  const search = query?.trim()
-  if (!search) {
-    return undefined
-  }
+type ExerciseSearchRow = {
+  id: string
+  name: string
+  muscleGroup: string
+}
 
+function normalizeExerciseSearchQuery(query?: string) {
+  return query?.trim() ?? ""
+}
+
+function mapExercise(exercise: ExerciseSearchRow): ExerciseDTO {
   return {
-    OR: [
-      {
-        name: {
-          contains: search,
-          mode: "insensitive",
-        },
-      },
-      {
-        muscleGroup: {
-          contains: search,
-          mode: "insensitive",
-        },
-      },
-    ],
+    id: exercise.id,
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
   }
 }
 
@@ -207,17 +201,21 @@ export class PrismaRepository {
   constructor(private readonly prisma: PrismaClientType) {}
 
   async getExercises(options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
-    const exercises = await this.prisma.exercise.findMany({
-      where: buildExerciseSearchWhere(options.query),
-      orderBy: [{ muscleGroup: "asc" }, { name: "asc" }],
-      take: options.limit ?? 20,
-    })
+    const query = normalizeExerciseSearchQuery(options.query)
+    const limit = options.limit ?? 20
+    const exercises = await this.prisma.$queryRaw<ExerciseSearchRow[]>(Prisma.sql`
+      SELECT "id", "name", "muscleGroup"
+      FROM "Exercise"
+      WHERE (
+        ${query} = ''
+        OR public.immutable_unaccent(lower("name")) LIKE '%' || public.immutable_unaccent(lower(${query})) || '%'
+        OR public.immutable_unaccent(lower("muscleGroup")) LIKE '%' || public.immutable_unaccent(lower(${query})) || '%'
+      )
+      ORDER BY "muscleGroup" ASC, "name" ASC
+      LIMIT ${limit}
+    `)
 
-    return exercises.map((exercise) => ({
-      id: exercise.id,
-      name: exercise.name,
-      muscleGroup: exercise.muscleGroup,
-    }))
+    return exercises.map(mapExercise)
   }
 
   async getPlans(userId: string): Promise<PlanDTO[]> {
@@ -901,26 +899,29 @@ export class PrismaRepository {
   }
 
   async getProgressExercises(userId: string, options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
-    const exercises = await this.prisma.exercise.findMany({
-      where: {
-        ...buildExerciseSearchWhere(options.query),
-        workoutExercises: {
-          some: {
-            workoutSession: {
-              userId,
-            },
-          },
-        },
-      },
-      orderBy: [{ muscleGroup: "asc" }, { name: "asc" }],
-      take: options.limit ?? 20,
-    })
+    const query = normalizeExerciseSearchQuery(options.query)
+    const limit = options.limit ?? 20
+    const exercises = await this.prisma.$queryRaw<ExerciseSearchRow[]>(Prisma.sql`
+      SELECT exercise."id", exercise."name", exercise."muscleGroup"
+      FROM "Exercise" AS exercise
+      WHERE EXISTS (
+        SELECT 1
+        FROM "WorkoutExercise" AS workout_exercise
+        INNER JOIN "WorkoutSession" AS workout_session
+          ON workout_session."id" = workout_exercise."workoutSessionId"
+        WHERE workout_exercise."exerciseId" = exercise."id"
+          AND workout_session."userId" = ${userId}
+      )
+      AND (
+        ${query} = ''
+        OR public.immutable_unaccent(lower(exercise."name")) LIKE '%' || public.immutable_unaccent(lower(${query})) || '%'
+        OR public.immutable_unaccent(lower(exercise."muscleGroup")) LIKE '%' || public.immutable_unaccent(lower(${query})) || '%'
+      )
+      ORDER BY exercise."muscleGroup" ASC, exercise."name" ASC
+      LIMIT ${limit}
+    `)
 
-    return exercises.map((exercise) => ({
-      id: exercise.id,
-      name: exercise.name,
-      muscleGroup: exercise.muscleGroup,
-    }))
+    return exercises.map(mapExercise)
   }
 
   async getProgressSeries(userId: string, exerciseId: string): Promise<ProgressSeriesDTO | null> {

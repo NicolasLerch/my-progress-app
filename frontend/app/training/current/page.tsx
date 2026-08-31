@@ -365,18 +365,6 @@ export default function TrainingCurrentPage() {
     })
   }
 
-  function startRestTimer(workoutExerciseId: string) {
-    setRestTimers((currentTimers) => {
-      const nextTimers = {
-        ...currentTimers,
-        [workoutExerciseId]: { startedAt: Date.now() },
-      }
-
-      void persistTrainingDraft({ restTimers: nextTimers })
-      return nextTimers
-    })
-  }
-
   function toggleRestTimer(workoutExerciseId: string) {
     setRestTimers((currentTimers) => {
       const timer = currentTimers[workoutExerciseId]
@@ -549,14 +537,18 @@ export default function TrainingCurrentPage() {
         editingSetNumber: undefined,
       },
     }
+    const nextRestTimers = editingSetNumber
+      ? restTimers
+      : {
+          ...restTimers,
+          [workoutExerciseId]: { startedAt: Date.now() },
+        }
 
     setSession(nextSession)
     setExerciseUiState(nextExerciseState)
-    if (!editingSetNumber) {
-      startRestTimer(workoutExerciseId)
-    }
+    setRestTimers(nextRestTimers)
     await saveSessionSnapshot(nextSession)
-    await persistTrainingDraft({ exercises: nextExerciseState })
+    await persistTrainingDraft({ exercises: nextExerciseState, restTimers: nextRestTimers })
     await queueSetOperation(session.id, workoutExerciseId, payload)
     pendingSyncCountRef.current += 1
     setPending(true)
