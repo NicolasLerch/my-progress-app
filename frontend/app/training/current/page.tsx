@@ -47,9 +47,12 @@ import { useAuthReady } from "@/hooks/use-auth-ready"
 import { cn } from "@/lib/utils"
 import {
   closeActiveWorkoutNotification,
+  closeRestTimerNotification,
+  closeRestTimerNotifications,
   getNotificationPermission,
   requestWorkoutNotificationPermission,
   showActiveWorkoutNotification,
+  showRestTimerNotification,
 } from "@/lib/workout-session-notification"
 
 type ExerciseUiState = TrainingDraftExerciseState
@@ -294,6 +297,51 @@ export default function TrainingCurrentPage() {
 
     return () => window.clearInterval(intervalId)
   }, [session?.id])
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      setClockNow(Date.now())
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [])
+
+  useEffect(() => {
+    if (!session || workoutNotificationPermission !== "granted") {
+      return
+    }
+
+    const expiredTimers = Object.entries(restTimers).flatMap(([workoutExerciseId, timer]) => {
+      const exercise = session.exercises.find((item) => item.id === workoutExerciseId)
+      if (!exercise || timer.pausedAt || exercise.restSeconds <= 0) {
+        return []
+      }
+
+      const elapsedSeconds = Math.max(0, Math.floor((clockNow - timer.startedAt) / 1000))
+      if (elapsedSeconds < exercise.restSeconds) {
+        return []
+      }
+
+      return [{ exercise, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+    })
+
+    if (document.visibilityState === "visible") {
+      expiredTimers.forEach(({ exercise }) => {
+        void closeRestTimerNotification(session.id, exercise.id).catch(() => {})
+      })
+      return
+    }
+
+    expiredTimers.forEach(({ exercise, overtimeSeconds }) => {
+      void showRestTimerNotification({
+        sessionId: session.id,
+        workoutExerciseId: exercise.id,
+        exerciseName: exercise.exerciseName,
+        overtimeSeconds,
+      }).catch(() => {})
+    })
+  }, [clockNow, restTimers, session, workoutNotificationPermission])
 
   const completedExercises = useMemo(
     () => session?.exercises.filter(getExerciseCompletion).length ?? 0,
@@ -547,6 +595,9 @@ export default function TrainingCurrentPage() {
     setSession(nextSession)
     setExerciseUiState(nextExerciseState)
     setRestTimers(nextRestTimers)
+    if (!editingSetNumber) {
+      void closeRestTimerNotification(session.id, workoutExerciseId).catch(() => {})
+    }
     await saveSessionSnapshot(nextSession)
     await persistTrainingDraft({ exercises: nextExerciseState, restTimers: nextRestTimers })
     await queueSetOperation(session.id, workoutExerciseId, payload)
@@ -612,6 +663,7 @@ export default function TrainingCurrentPage() {
 
       const completed = await api.completeWorkoutSession(session.id)
       await closeActiveWorkoutNotification(session.id)
+      await closeRestTimerNotifications(session.id)
       setSession(completed)
       setCompletedSessionId(completed.id)
       setCompletedDialogOpen(true)
@@ -637,6 +689,7 @@ export default function TrainingCurrentPage() {
     try {
       await api.updateWorkoutSession(session.id, { status: "abandoned" })
       await closeActiveWorkoutNotification(session.id)
+      await closeRestTimerNotifications(session.id)
       await deleteSessionSnapshot(session.id)
       await deleteTrainingDraft(session.id)
       await clearSessionSetOperations(session.id)

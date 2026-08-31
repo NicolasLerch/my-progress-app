@@ -75,6 +75,7 @@ model PlanDay {
 model PlanExercise {
   id          String   @id @default(cuid())
   planDayId   String
+  order       Int
   exerciseId  String
   targetSets  Int
   targetReps  String
@@ -82,6 +83,8 @@ model PlanExercise {
   notes       String?
   planDay     PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
   exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@unique([planDayId, order])
 }
 
 model WorkoutSession {

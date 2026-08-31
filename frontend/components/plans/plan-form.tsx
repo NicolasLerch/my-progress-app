@@ -126,7 +126,8 @@ export function buildPlanInput(
     days: values.days.map((day, dayIndex) => ({
       name: day.name.trim(),
       order: dayIndex + 1,
-      exercises: day.exercises.map((exercise) => ({
+      exercises: day.exercises.map((exercise, exerciseIndex) => ({
+        order: exerciseIndex + 1,
         exerciseId: exercise.exerciseId,
         exerciseName: exercise.exerciseName.trim(),
         targetSets: parsePositiveInteger(exercise.targetSets) ?? 0,
@@ -250,6 +251,20 @@ export function PlanForm({
           ? day.exercises
           : day.exercises.filter((exercise) => exercise.id !== exerciseId),
     }))
+  }
+
+  function moveExercise(dayId: string, exerciseId: string, direction: 'up' | 'down') {
+    updateDay(dayId, (day) => {
+      const index = day.exercises.findIndex((exercise) => exercise.id === exerciseId)
+      if (index === -1) return day
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= day.exercises.length) return day
+
+      const exercises = [...day.exercises]
+      const [moved] = exercises.splice(index, 1)
+      exercises.splice(targetIndex, 0, moved)
+      return { ...day, exercises }
+    })
   }
 
   function updateExercise(
@@ -390,16 +405,38 @@ export function PlanForm({
                   <div key={exercise.id} className="rounded-2xl border border-border/70 bg-secondary/40 p-3">
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <p className="text-sm font-medium">Ejercicio {exerciseIndex + 1}</p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => removeExercise(day.id, exercise.id)}
-                        disabled={day.exercises.length === 1}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span className="sr-only">Eliminar ejercicio</span>
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveExercise(day.id, exercise.id, 'up')}
+                          disabled={exerciseIndex === 0}
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                          <span className="sr-only">Subir ejercicio</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveExercise(day.id, exercise.id, 'down')}
+                          disabled={exerciseIndex === day.exercises.length - 1}
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                          <span className="sr-only">Bajar ejercicio</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => removeExercise(day.id, exercise.id)}
+                          disabled={day.exercises.length === 1}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="sr-only">Eliminar ejercicio</span>
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-3">

@@ -50,10 +50,10 @@ export const plansSeed: PlanDTO[] = [
         name: "Dia 1 - Pecho y Triceps",
         order: 1,
         exercises: [
-          { id: "pe-1", planDayId: "day-1", exerciseId: "bench-press", exerciseName: "Press banca", targetSets: 4, targetReps: "8", restSeconds: 90 },
-          { id: "pe-2", planDayId: "day-1", exerciseId: "incline-dumbbell-press", exerciseName: "Press inclinado mancuernas", targetSets: 4, targetReps: "10", restSeconds: 75 },
-          { id: "pe-3", planDayId: "day-1", exerciseId: "cable-fly", exerciseName: "Aperturas en polea", targetSets: 3, targetReps: "12", restSeconds: 60 },
-          { id: "pe-4", planDayId: "day-1", exerciseId: "dips", exerciseName: "Fondos en paralelas", targetSets: 3, targetReps: "12", restSeconds: 60 },
+          { id: "pe-1", planDayId: "day-1", order: 1, exerciseId: "bench-press", exerciseName: "Press banca", targetSets: 4, targetReps: "8", restSeconds: 90 },
+          { id: "pe-2", planDayId: "day-1", order: 2, exerciseId: "incline-dumbbell-press", exerciseName: "Press inclinado mancuernas", targetSets: 4, targetReps: "10", restSeconds: 75 },
+          { id: "pe-3", planDayId: "day-1", order: 3, exerciseId: "cable-fly", exerciseName: "Aperturas en polea", targetSets: 3, targetReps: "12", restSeconds: 60 },
+          { id: "pe-4", planDayId: "day-1", order: 4, exerciseId: "dips", exerciseName: "Fondos en paralelas", targetSets: 3, targetReps: "12", restSeconds: 60 },
         ],
       },
       {
@@ -62,8 +62,8 @@ export const plansSeed: PlanDTO[] = [
         name: "Dia 2 - Espalda",
         order: 2,
         exercises: [
-          { id: "pe-5", planDayId: "day-2", exerciseId: "pull-up", exerciseName: "Dominadas", targetSets: 4, targetReps: "8", restSeconds: 90 },
-          { id: "pe-6", planDayId: "day-2", exerciseId: "barbell-row", exerciseName: "Remo con barra", targetSets: 4, targetReps: "10", restSeconds: 90 },
+          { id: "pe-5", planDayId: "day-2", order: 1, exerciseId: "pull-up", exerciseName: "Dominadas", targetSets: 4, targetReps: "8", restSeconds: 90 },
+          { id: "pe-6", planDayId: "day-2", order: 2, exerciseId: "barbell-row", exerciseName: "Remo con barra", targetSets: 4, targetReps: "10", restSeconds: 90 },
         ],
       },
       {
@@ -72,8 +72,8 @@ export const plansSeed: PlanDTO[] = [
         name: "Dia 3 - Piernas",
         order: 3,
         exercises: [
-          { id: "pe-7", planDayId: "day-3", exerciseId: "squat", exerciseName: "Sentadilla", targetSets: 4, targetReps: "6", restSeconds: 120 },
-          { id: "pe-8", planDayId: "day-3", exerciseId: "deadlift", exerciseName: "Peso muerto", targetSets: 3, targetReps: "5", restSeconds: 120 },
+          { id: "pe-7", planDayId: "day-3", order: 1, exerciseId: "squat", exerciseName: "Sentadilla", targetSets: 4, targetReps: "6", restSeconds: 120 },
+          { id: "pe-8", planDayId: "day-3", order: 2, exerciseId: "deadlift", exerciseName: "Peso muerto", targetSets: 3, targetReps: "5", restSeconds: 120 },
         ],
       },
     ],
