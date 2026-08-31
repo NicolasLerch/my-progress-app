@@ -62,6 +62,7 @@ async function seed() {
             exercises: {
               create: day.exercises.map((exercise) => ({
                 id: exercise.id,
+                order: exercise.order,
                 exerciseId: exercise.exerciseId,
                 targetSets: exercise.targetSets,
                 targetReps: exercise.targetReps,

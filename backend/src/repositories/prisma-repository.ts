@@ -29,6 +29,7 @@ const planInclude = {
     orderBy: { order: "asc" },
     include: {
       exercises: {
+        orderBy: [{ order: "asc" }, { id: "asc" }],
         include: {
           exercise: true,
         },
@@ -101,6 +102,7 @@ function mapPlanExercise(exercise: PlanWithRelations["days"][number]["exercises"
   return {
     id: exercise.id,
     planDayId: exercise.planDayId,
+    order: exercise.order,
     exerciseId: exercise.exerciseId,
     exerciseName: exercise.exercise.name,
     targetSets: exercise.targetSets,
@@ -200,6 +202,15 @@ function mapExercise(exercise: ExerciseSearchRow): ExerciseDTO {
 export class PrismaRepository {
   constructor(private readonly prisma: PrismaClientType) {}
 
+  private assertConsecutiveOrders(items: Array<{ order: number }>, scope: string) {
+    const orders = [...items.map((item) => item.order)].sort((left, right) => left - right)
+    const isConsecutive = orders.every((order, index) => order === index + 1)
+
+    if (!isConsecutive) {
+      throw new Error(`El orden de ${scope} debe ser consecutivo y comenzar en 1.`)
+    }
+  }
+
   async getExercises(options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
     const query = normalizeExerciseSearchQuery(options.query)
     const limit = options.limit ?? 20
@@ -239,6 +250,8 @@ export class PrismaRepository {
 
   async createPlan(userId: string, input: CreatePlanInputDTO): Promise<PlanDTO> {
     const parsed = createPlanInputSchema.parse(input)
+    this.assertConsecutiveOrders(parsed.days, "los dias")
+    parsed.days.forEach((day) => this.assertConsecutiveOrders(day.exercises, `los ejercicios del dia ${day.name}`))
 
     await this.ensureUser({ id: userId })
 
@@ -267,6 +280,7 @@ export class PrismaRepository {
                 order: day.order,
                 exercises: {
                   create: day.exercises.map((exercise) => ({
+                    order: exercise.order,
                     exerciseId: exercise.exerciseId,
                     targetSets: exercise.targetSets,
                     targetReps: exercise.targetReps,
@@ -315,6 +329,7 @@ export class PrismaRepository {
       })
 
       if (partial.days) {
+        this.assertConsecutiveOrders(partial.days, "los dias")
         const existingDayIds = new Set(existing.days.map((day) => day.id))
         const incomingDayIds = new Set(partial.days.map((day) => day.id))
         const removedDayIds = existing.days
@@ -353,6 +368,12 @@ export class PrismaRepository {
           })
         }
 
+        // Move existing rows out of the final range before swaps such as 1 <-> 2.
+        await tx.planDay.updateMany({
+          where: { planId },
+          data: { order: { increment: 1_000_000 } },
+        })
+
         for (const day of partial.days) {
           if (existingDayIds.has(day.id)) {
             await tx.planDay.update({
@@ -374,6 +395,7 @@ export class PrismaRepository {
           }
 
           const existingDay = existing.days.find((item) => item.id === day.id)
+          this.assertConsecutiveOrders(day.exercises, `los ejercicios del dia ${day.name}`)
           const existingExerciseIds = new Set(existingDay?.exercises.map((exercise) => exercise.id) ?? [])
           const incomingExerciseIds = new Set(day.exercises.map((exercise) => exercise.id))
           const removedExerciseIds = [...existingExerciseIds].filter((exerciseId) => !incomingExerciseIds.has(exerciseId))
@@ -388,11 +410,19 @@ export class PrismaRepository {
             })
           }
 
+          if (existingExerciseIds.size > 0) {
+            await tx.planExercise.updateMany({
+              where: { planDayId: day.id },
+              data: { order: { increment: 1_000_000 } },
+            })
+          }
+
           for (const exercise of day.exercises) {
             if (existingExerciseIds.has(exercise.id)) {
               await tx.planExercise.update({
                 where: { id: exercise.id },
                 data: {
+                  order: exercise.order,
                   exerciseId: exercise.exerciseId,
                   targetSets: exercise.targetSets,
                   targetReps: exercise.targetReps,
@@ -405,6 +435,7 @@ export class PrismaRepository {
                 data: {
                   id: exercise.id,
                   planDayId: day.id,
+                  order: exercise.order,
                   exerciseId: exercise.exerciseId,
                   targetSets: exercise.targetSets,
                   targetReps: exercise.targetReps,
@@ -421,7 +452,7 @@ export class PrismaRepository {
         where: { id: planId },
         include: planInclude,
       })
-    })
+    }, { maxWait: 10_000, timeout: 30_000 })
 
     return mapPlan(plan)
   }
@@ -638,8 +669,8 @@ export class PrismaRepository {
         planName: plan.name,
         dayName: day.name,
         exercises: {
-          create: day.exercises.map((exercise, index) => ({
-            position: index + 1,
+          create: day.exercises.map((exercise) => ({
+            position: exercise.order,
             exerciseId: exercise.exerciseId,
             exerciseName: exercise.exercise.name,
             planExerciseId: exercise.id,
