@@ -1,8 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import type { ExerciseDTO, ProgressPointDTO, ProgressSeriesDTO } from "@my-progress/shared"
+import type {
+  ExerciseDTO,
+  OverallProgressAnalysisDTO,
+  ProgressAnalysisDTO,
+  ProgressMetricAnalysisDTO,
+  ProgressPointDTO,
+  ProgressSeriesDTO,
+  ProgressStatus,
+} from "@my-progress/shared"
 import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { Button } from "@/components/ui/button"
@@ -18,11 +27,21 @@ type ChartPoint = ProgressPointDTO & {
   volumeIndex?: number
   repsIndex?: number
 }
+type AnalysisMetricKey = "pr" | "volume" | "repetitions"
+type MetricCardData = {
+  label: string
+  value: string
+  hint: string
+  status?: ProgressStatus
+  accentColor?: string
+  wide?: boolean
+}
 
 const METRICS: Record<ProgressMetric, {
   label: string
   dataKey: "weight" | "volume" | "reps"
   indexKey: "weightIndex" | "volumeIndex" | "repsIndex"
+  analysisKey: AnalysisMetricKey
   color: string
   formatValue: (value: number) => string
 }> = {
@@ -30,6 +49,7 @@ const METRICS: Record<ProgressMetric, {
     label: "PR",
     dataKey: "weight",
     indexKey: "weightIndex",
+    analysisKey: "pr",
     color: "#ea580c",
     formatValue: formatWeight,
   },
@@ -37,6 +57,7 @@ const METRICS: Record<ProgressMetric, {
     label: "Volumen",
     dataKey: "volume",
     indexKey: "volumeIndex",
+    analysisKey: "volume",
     color: "#2563eb",
     formatValue: formatVolume,
   },
@@ -44,6 +65,7 @@ const METRICS: Record<ProgressMetric, {
     label: "Repeticiones",
     dataKey: "reps",
     indexKey: "repsIndex",
+    analysisKey: "repetitions",
     color: "#16a34a",
     formatValue: formatReps,
   },
@@ -122,97 +144,47 @@ export default function ProgressPage() {
 
   const selectedMetric = activeMetrics.length === 1 ? activeMetrics[0] : null
   const metricCards = useMemo(() => {
-    if (!series || rawChartData.length === 0 || !selectedMetric) {
+    if (!series || rawChartData.length === 0) {
       return null
     }
 
-    if (selectedMetric === "weight") {
-      return [
-        {
-          label: "PR maximo",
-          value: formatWeight(series.stats.maxWeight),
-          hint: formatShortDate(series.stats.maxWeightDate),
-        },
-        {
-          label: "PR minimo",
-          value: formatWeight(series.stats.minWeight),
-          hint: formatShortDate(series.stats.minWeightDate),
-        },
-        {
-          label: "Volumen maximo",
-          value: formatVolume(series.stats.maxVolume),
-          hint: formatShortDate(series.stats.maxVolumeDate),
-        },
-        {
-          label: "Cambio neto",
-          value: formatMetricDelta(series.stats.netChange, "weight"),
-          hint: `${series.stats.totalSessions} sesiones`,
-        },
-      ]
-    }
-
-    if (selectedMetric === "reps") {
-      const repetitions = rawChartData.map((point) => point.reps)
-      const maxReps = Math.max(...repetitions)
-      const minReps = Math.min(...repetitions)
-      const maxRepsPoint = rawChartData.find((point) => point.reps === maxReps) ?? rawChartData[0]
-      const minRepsPoint = rawChartData.find((point) => point.reps === minReps) ?? rawChartData[0]
-      const latestPoint = rawChartData[rawChartData.length - 1]
-
-      return [
-        {
-          label: "Mas repeticiones",
-          value: formatReps(maxReps),
-          hint: `${maxRepsPoint.sets} series - ${formatShortDate(maxRepsPoint.date)}`,
-        },
-        {
-          label: "Menos repeticiones",
-          value: formatReps(minReps),
-          hint: `${minRepsPoint.sets} series - ${formatShortDate(minRepsPoint.date)}`,
-        },
-        {
-          label: "Ultima sesion",
-          value: formatReps(latestPoint.reps),
-          hint: `${latestPoint.sets} series - ${formatShortDate(latestPoint.date)}`,
-        },
-        {
-          label: "Cambio neto",
-          value: formatMetricDelta(latestPoint.reps - rawChartData[0].reps, "reps"),
-          hint: `${series.stats.totalSessions} sesiones`,
-        },
-      ]
-    }
-
-    const volumes = rawChartData.map((point) => point.volume)
-    const maxVolume = Math.max(...volumes)
-    const minVolume = Math.min(...volumes)
-    const maxVolumePoint = rawChartData.find((point) => point.volume === maxVolume) ?? rawChartData[0]
-    const minVolumePoint = rawChartData.find((point) => point.volume === minVolume) ?? rawChartData[0]
     const latestPoint = rawChartData[rawChartData.length - 1]
+    const analysis = series.analysis
 
-    return [
-      {
-        label: "Volumen maximo",
-        value: formatVolume(maxVolume),
-        hint: `${maxVolumePoint.reps} reps - ${formatShortDate(maxVolumePoint.date)}`,
-      },
-      {
-        label: "Volumen minimo",
-        value: formatVolume(minVolume),
-        hint: `${minVolumePoint.reps} reps - ${formatShortDate(minVolumePoint.date)}`,
-      },
-      {
-        label: "Ultima sesion",
-        value: formatReps(latestPoint.reps),
-        hint: `${latestPoint.sets} series - ${formatShortDate(latestPoint.date)}`,
-      },
-      {
-        label: "Cambio neto",
-        value: formatMetricDelta(latestPoint.volume - rawChartData[0].volume, "volume"),
-        hint: `${series.stats.totalSessions} sesiones`,
-      },
-    ]
-  }, [rawChartData, selectedMetric, series])
+    if (selectedMetric) {
+      const config = METRICS[selectedMetric]
+      const metricAnalysis = analysis[config.analysisKey]
+      return [
+        {
+          label: lastMetricLabel(selectedMetric),
+          value: config.formatValue(metricAnalysis.current),
+          hint: formatShortDate(latestPoint.date),
+          accentColor: config.color,
+        },
+        {
+          label: maxMetricLabel(selectedMetric),
+          value: config.formatValue(metricAnalysis.max),
+          hint: formatShortDate(metricAnalysis.maxDate),
+          accentColor: config.color,
+        },
+        analysisCard("Progreso desde el inicio", metricAnalysis.historical, "Primeras 3 vs ultimas 3", analysis),
+        analysisCard("Tendencia reciente", metricAnalysis.recent, "Ultimas 6 sesiones", analysis),
+      ]
+    }
+
+    const comparisonCards = visibleMetrics.map((metric) => {
+      const config = METRICS[metric]
+      return analysisCard(config.label, analysis[config.analysisKey].historical, "Progreso desde el inicio", analysis, config.color)
+    })
+    const overallCard = analysisCard("General", analysis.overall.historical, "PR, volumen y repeticiones", analysis)
+
+    return [...comparisonCards, { ...overallCard, wide: comparisonCards.length === 2 }]
+  }, [rawChartData, selectedMetric, series, visibleMetrics])
+
+  const analysisSummary = useMemo(
+    () => series ? buildAnalysisSummary(series.analysis, visibleMetrics) : null,
+    [series, visibleMetrics],
+  )
 
   function toggleMetric(metric: ProgressMetric) {
     setActiveMetrics((current) => {
@@ -323,9 +295,20 @@ export default function ProgressPage() {
       {metricCards && (
         <div className="grid grid-cols-2 gap-3">
           {metricCards.map((card) => (
-            <MetricCard key={card.label} label={card.label} value={card.value} hint={card.hint} />
+            <MetricCard key={card.label} {...card} />
           ))}
         </div>
+      )}
+
+      {analysisSummary && (
+        <Card>
+          <CardContent className="space-y-1 p-4">
+            <p className="text-sm font-medium">Resumen del analisis</p>
+            {analysisSummary.map((line) => (
+              <p key={line} className="text-sm text-muted-foreground">{line}</p>
+            ))}
+          </CardContent>
+        </Card>
       )}
     </div>
   )
@@ -360,13 +343,108 @@ function ProgressTooltip({
   )
 }
 
-function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+function analysisCard(
+  label: string,
+  change: { changePercent: number; status: ProgressStatus } | OverallProgressAnalysisDTO | undefined,
+  hint: string,
+  analysis: ProgressAnalysisDTO,
+  accentColor?: string,
+): MetricCardData {
+  if (change) {
+    return {
+      label,
+      value: formatPercent("changePercent" in change ? change.changePercent : change.score),
+      hint,
+      status: change.status,
+      accentColor,
+    }
+  }
+
+  if (!analysis.canAnalyzeProgress) {
+    return {
+      label,
+      value: `Faltan ${analysis.sessionsRemaining} ${sessionLabel(analysis.sessionsRemaining)}`,
+      hint: `Analisis disponible con ${analysis.sessionsRequired} sesiones`,
+      accentColor,
+    }
+  }
+
+  return {
+    label,
+    value: "Sin datos comparables",
+    hint: "Hace falta una base de valor positiva",
+    accentColor,
+  }
+}
+
+function buildAnalysisSummary(analysis: ProgressAnalysisDTO, visibleMetrics: ProgressMetric[]): string[] {
+  if (!analysis.canAnalyzeProgress) {
+    return [`Necesitas ${analysis.sessionsRemaining} ${sessionLabel(analysis.sessionsRemaining)} mas para analizar tu progreso.`]
+  }
+
+  if (visibleMetrics.length === 1) {
+    const metric = visibleMetrics[0]
+    const metricAnalysis = analysis[METRICS[metric].analysisKey]
+    if (!metricAnalysis.historical) {
+      return [`No hay datos suficientes de ${METRICS[metric].label.toLowerCase()} para generar un analisis formal.`]
+    }
+
+    const lines = [metricHistoricalSummary(METRICS[metric].label, metricAnalysis.historical.status)]
+    if (metricAnalysis.recent) {
+      lines.push(metricRecentSummary(METRICS[metric].label, metricAnalysis.recent.status))
+    }
+    return lines
+  }
+
+  const historical = analysis.overall.historical
+  if (!historical) {
+    return ["No hay datos suficientes de las tres metricas para generar un analisis general."]
+  }
+
+  const lines = [historicalSummary(historical.status)]
+  if (analysis.overall.recent) {
+    lines.push(recentSummary(analysis.overall.recent.status))
+  }
+
+  const mostImproved = visibleMetrics
+    .map((metric) => ({ metric, change: analysis[METRICS[metric].analysisKey].historical }))
+    .filter((item): item is { metric: ProgressMetric; change: { changePercent: number; status: ProgressStatus } } => Boolean(item.change))
+    .reduce<{ metric: ProgressMetric; change: { changePercent: number; status: ProgressStatus } } | undefined>(
+      (best, item) => !best || item.change.changePercent > best.change.changePercent ? item : best,
+      undefined,
+    )
+
+  if (mostImproved && mostImproved.change.changePercent > 0) {
+    lines.push(`${METRICS[mostImproved.metric].label} es la metrica que mas mejoro (${formatPercent(mostImproved.change.changePercent)}).`)
+  }
+
+  return lines
+}
+
+function ProgressStatusLabel({ status }: { status: ProgressStatus }) {
+  const content = {
+    positive: { label: "Positiva", icon: ArrowUp, className: "text-emerald-500" },
+    maintenance: { label: "Mantenimiento", icon: ArrowRight, className: "text-muted-foreground" },
+    negative: { label: "Negativa", icon: ArrowDown, className: "text-red-500" },
+  }[status]
+  const Icon = content.icon
+
   return (
-    <Card>
+    <p className={`flex items-center gap-1 text-xs ${content.className}`}>
+      <Icon className="size-3" />
+      {content.label}
+    </p>
+  )
+}
+
+function MetricCard({ label, value, hint, status, accentColor, wide }: MetricCardData) {
+  return (
+    <Card className={wide ? "col-span-2" : undefined}>
       <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground" style={accentColor ? { color: accentColor } : undefined}>{label}</p>
         <p className="text-lg font-bold">{value}</p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        {status ? <ProgressStatusLabel status={status} /> : <p className="text-xs text-muted-foreground">{hint}</p>}
+        {status && <p className="text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
   )
@@ -378,6 +456,63 @@ function formatVolume(volume: number) {
 
 function formatReps(reps: number) {
   return `${Math.round(reps)} reps`
+}
+
+function formatPercent(value: number) {
+  const prefix = value > 0 ? "+" : ""
+  return `${prefix}${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`
+}
+
+function lastMetricLabel(metric: ProgressMetric) {
+  return metric === "weight" ? "Ultimo PR" : metric === "volume" ? "Ultimo volumen" : "Ultimas repeticiones"
+}
+
+function maxMetricLabel(metric: ProgressMetric) {
+  return metric === "weight" ? "Mejor PR" : metric === "volume" ? "Volumen maximo" : "Maximo de repeticiones"
+}
+
+function sessionLabel(count: number) {
+  return count === 1 ? "sesion" : "sesiones"
+}
+
+function historicalSummary(status: ProgressStatus) {
+  if (status === "positive") {
+    return "Tendencia general positiva. Tu rendimiento es superior al de tus primeras sesiones."
+  }
+  if (status === "negative") {
+    return "Tu rendimiento general se encuentra por debajo de tus primeras sesiones."
+  }
+  return "Tu rendimiento general se mantiene estable respecto de tus primeras sesiones."
+}
+
+function recentSummary(status: ProgressStatus) {
+  if (status === "positive") {
+    return "Tus ultimas sesiones muestran una evolucion positiva."
+  }
+  if (status === "negative") {
+    return "Tus ultimas sesiones muestran una caida de rendimiento."
+  }
+  return "Tu rendimiento reciente se mantiene estable."
+}
+
+function metricHistoricalSummary(label: string, status: ProgressStatus) {
+  if (status === "positive") {
+    return `Tu progreso de ${label.toLowerCase()} es positivo respecto de tus primeras sesiones.`
+  }
+  if (status === "negative") {
+    return `Tu ${label.toLowerCase()} esta por debajo de tus primeras sesiones.`
+  }
+  return `Tu ${label.toLowerCase()} se mantiene estable respecto de tus primeras sesiones.`
+}
+
+function metricRecentSummary(label: string, status: ProgressStatus) {
+  if (status === "positive") {
+    return `Tus ultimas sesiones muestran una evolucion positiva de ${label.toLowerCase()}.`
+  }
+  if (status === "negative") {
+    return `Tus ultimas sesiones muestran una caida de ${label.toLowerCase()}.`
+  }
+  return `Tu ${label.toLowerCase()} reciente se mantiene estable.`
 }
 
 function formatAxisValue(value: number, metric: ProgressMetric, isComparing: boolean) {
@@ -394,13 +529,4 @@ function formatAxisValue(value: number, metric: ProgressMetric, isComparing: boo
   }
 
   return Math.round(value).toString()
-}
-
-function formatMetricDelta(value: number, metric: ProgressMetric) {
-  const prefix = value >= 0 ? "+" : ""
-  if (metric === "weight") {
-    return `${prefix}${formatWeight(value)}`
-  }
-
-  return metric === "volume" ? `${prefix}${formatVolume(value)}` : `${prefix}${formatReps(value)}`
 }

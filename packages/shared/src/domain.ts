@@ -152,10 +152,45 @@ export interface ProgressStatsDTO {
   totalSessions: number
 }
 
+export type ProgressStatus = "positive" | "maintenance" | "negative"
+
+export interface ProgressChangeDTO {
+  changePercent: number
+  status: ProgressStatus
+}
+
+export interface ProgressMetricAnalysisDTO {
+  current: number
+  max: number
+  maxDate: string
+  historical?: ProgressChangeDTO
+  recent?: ProgressChangeDTO
+}
+
+export interface OverallProgressAnalysisDTO {
+  score: number
+  status: ProgressStatus
+}
+
+export interface ProgressAnalysisDTO {
+  sessionCount: number
+  canAnalyzeProgress: boolean
+  sessionsRequired: number
+  sessionsRemaining: number
+  pr: ProgressMetricAnalysisDTO
+  volume: ProgressMetricAnalysisDTO
+  repetitions: ProgressMetricAnalysisDTO
+  overall: {
+    historical?: OverallProgressAnalysisDTO
+    recent?: OverallProgressAnalysisDTO
+  }
+}
+
 export interface ProgressSeriesDTO {
   exercise: ExerciseDTO
   points: ProgressPointDTO[]
   stats: ProgressStatsDTO
+  analysis: ProgressAnalysisDTO
 }
 
 export interface WorkoutSetInputDTO {
