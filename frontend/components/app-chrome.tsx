@@ -14,7 +14,9 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   return (
     <AuthGate>
       <div className="min-h-screen bg-background">
-        <main className="max-w-lg mx-auto px-4 pt-6 pb-24">{children}</main>
+        <main className="mx-auto w-full max-w-lg px-3 pt-6 pb-24">
+          {children}
+        </main>
         {!hideNav && <BottomNav />}
         <PwaRegister />
       </div>
