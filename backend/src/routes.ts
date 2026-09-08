@@ -94,6 +94,7 @@ export async function registerRoutes(app: FastifyInstance) {
                   targetSets: exercise.targetSets,
                   targetReps: exercise.targetReps,
                   restSeconds: exercise.restSeconds,
+                  supersetGroupId: exercise.supersetGroupId,
                   notes: exercise.notes,
                 }))
               : day.exercises,
