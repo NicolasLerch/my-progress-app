@@ -108,6 +108,7 @@ function mapPlanExercise(exercise: PlanWithRelations["days"][number]["exercises"
     targetSets: exercise.targetSets,
     targetReps: exercise.targetReps,
     restSeconds: exercise.restSeconds,
+    supersetGroupId: exercise.supersetGroupId ?? undefined,
     notes: exercise.notes ?? undefined,
   }
 }
@@ -161,6 +162,7 @@ function mapWorkoutSession(session: WorkoutSessionWithRelations): WorkoutSession
       targetSets: exercise.targetSets,
       targetReps: exercise.targetReps,
       restSeconds: exercise.restSeconds,
+      supersetGroupId: exercise.supersetGroupId ?? undefined,
       notes: exercise.notes ?? undefined,
       sets: exercise.sets.map((set) => ({
         id: set.id,
@@ -211,6 +213,36 @@ export class PrismaRepository {
     }
   }
 
+  private assertSupersetGroups(
+    exercises: Array<{ order: number; targetSets: number; restSeconds: number; supersetGroupId?: string }>,
+    scope: string,
+  ) {
+    const groups = new Map<string, typeof exercises>()
+
+    exercises.forEach((exercise) => {
+      if (!exercise.supersetGroupId) return
+      const members = groups.get(exercise.supersetGroupId) ?? []
+      members.push(exercise)
+      groups.set(exercise.supersetGroupId, members)
+    })
+
+    groups.forEach((members, groupId) => {
+      const [first, second] = [...members].sort((left, right) => left.order - right.order)
+      if (
+        members.length !== 2 ||
+        !first ||
+        !second ||
+        second.order !== first.order + 1 ||
+        second.targetSets !== first.targetSets ||
+        second.restSeconds !== first.restSeconds
+      ) {
+        throw new Error(
+          `La superserie ${groupId} de ${scope} debe tener dos ejercicios consecutivos con las mismas series y descanso.`,
+        )
+      }
+    })
+  }
+
   async getExercises(options: ExerciseSearchOptions = {}): Promise<ExerciseDTO[]> {
     const query = normalizeExerciseSearchQuery(options.query)
     const limit = options.limit ?? 20
@@ -251,7 +283,10 @@ export class PrismaRepository {
   async createPlan(userId: string, input: CreatePlanInputDTO): Promise<PlanDTO> {
     const parsed = createPlanInputSchema.parse(input)
     this.assertConsecutiveOrders(parsed.days, "los dias")
-    parsed.days.forEach((day) => this.assertConsecutiveOrders(day.exercises, `los ejercicios del dia ${day.name}`))
+    parsed.days.forEach((day) => {
+      this.assertConsecutiveOrders(day.exercises, `los ejercicios del dia ${day.name}`)
+      this.assertSupersetGroups(day.exercises, `el dia ${day.name}`)
+    })
 
     await this.ensureUser({ id: userId })
 
@@ -285,6 +320,7 @@ export class PrismaRepository {
                     targetSets: exercise.targetSets,
                     targetReps: exercise.targetReps,
                     restSeconds: exercise.restSeconds,
+                    supersetGroupId: exercise.supersetGroupId,
                     notes: exercise.notes,
                   })),
                 },
@@ -396,6 +432,7 @@ export class PrismaRepository {
 
           const existingDay = existing.days.find((item) => item.id === day.id)
           this.assertConsecutiveOrders(day.exercises, `los ejercicios del dia ${day.name}`)
+          this.assertSupersetGroups(day.exercises, `el dia ${day.name}`)
           const existingExerciseIds = new Set(existingDay?.exercises.map((exercise) => exercise.id) ?? [])
           const incomingExerciseIds = new Set(day.exercises.map((exercise) => exercise.id))
           const removedExerciseIds = [...existingExerciseIds].filter((exerciseId) => !incomingExerciseIds.has(exerciseId))
@@ -427,6 +464,7 @@ export class PrismaRepository {
                   targetSets: exercise.targetSets,
                   targetReps: exercise.targetReps,
                   restSeconds: exercise.restSeconds,
+                  supersetGroupId: exercise.supersetGroupId,
                   notes: exercise.notes,
                 },
               })
@@ -440,6 +478,7 @@ export class PrismaRepository {
                   targetSets: exercise.targetSets,
                   targetReps: exercise.targetReps,
                   restSeconds: exercise.restSeconds,
+                  supersetGroupId: exercise.supersetGroupId,
                   notes: exercise.notes,
                 },
               })
@@ -678,6 +717,7 @@ export class PrismaRepository {
             targetSets: exercise.targetSets,
             targetReps: exercise.targetReps,
             restSeconds: exercise.restSeconds,
+            supersetGroupId: exercise.supersetGroupId,
             notes: exercise.notes,
           })),
         },

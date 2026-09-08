@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Link2, Plus, Trash2, Unlink } from 'lucide-react'
 import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shared'
 import { api } from '@/lib/api'
 import { useAuthReady } from '@/hooks/use-auth-ready'
@@ -22,6 +22,7 @@ type ExerciseForm = {
   targetSets: string
   targetReps: string
   restSeconds: string
+  supersetGroupId?: string
   notes: string
 }
 
@@ -46,6 +47,12 @@ type PlanFormProps = {
   onSubmit: (values: PlanFormValues) => Promise<void>
 }
 
+type UpdateExercise = (
+  dayId: string,
+  exerciseId: string,
+  updater: (exercise: ExerciseForm) => ExerciseForm,
+) => void
+
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -59,6 +66,7 @@ function createExerciseForm(defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 
     targetSets: '4',
     targetReps: '8',
     restSeconds: '90',
+    supersetGroupId: undefined,
     notes: '',
   }
 }
@@ -69,6 +77,117 @@ function createDayForm(index: number, defaultExercise?: Pick<ExerciseDTO, 'id' |
     name: `Dia ${index + 1}`,
     exercises: [createExerciseForm(defaultExercise)],
   }
+}
+
+function PlanExerciseFields({
+  dayId,
+  exercise,
+  sharedValues,
+  planInputClassName,
+  updateExercise,
+}: {
+  dayId: string
+  exercise: ExerciseForm
+  sharedValues: boolean
+  planInputClassName: string
+  updateExercise: UpdateExercise
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label>Ejercicio</Label>
+        <ExerciseSearchSelect
+          value={exercise.exerciseId}
+          selectedExercise={
+            exercise.exerciseId
+              ? {
+                  id: exercise.exerciseId,
+                  name: exercise.exerciseName,
+                  muscleGroup: exercise.muscleGroup,
+                }
+              : undefined
+          }
+          searchExercises={(query) => api.getExercises(query, 20)}
+          onSelect={(selectedExercise) =>
+            updateExercise(dayId, exercise.id, (currentExercise) => ({
+              ...currentExercise,
+              exerciseId: selectedExercise.id,
+              exerciseName: selectedExercise.name,
+              muscleGroup: selectedExercise.muscleGroup,
+            }))
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`sets-${exercise.id}`}>{sharedValues ? 'Series compartidas' : 'Series'}</Label>
+          <Input
+            id={`sets-${exercise.id}`}
+            type="number"
+            min="1"
+            value={exercise.targetSets}
+            onChange={(event) =>
+              updateExercise(dayId, exercise.id, (currentExercise) => ({
+                ...currentExercise,
+                targetSets: event.target.value,
+              }))
+            }
+            className={planInputClassName}
+            disabled={sharedValues}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`reps-${exercise.id}`}>Reps</Label>
+          <Input
+            id={`reps-${exercise.id}`}
+            type="text"
+            value={exercise.targetReps}
+            onChange={(event) =>
+              updateExercise(dayId, exercise.id, (currentExercise) => ({
+                ...currentExercise,
+                targetReps: event.target.value,
+              }))
+            }
+            placeholder="8 a 12"
+            className={planInputClassName}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`rest-${exercise.id}`}>{sharedValues ? 'Descanso compartido' : 'Descanso'}</Label>
+          <Input
+            id={`rest-${exercise.id}`}
+            type="number"
+            min="0"
+            value={exercise.restSeconds}
+            onChange={(event) =>
+              updateExercise(dayId, exercise.id, (currentExercise) => ({
+                ...currentExercise,
+                restSeconds: event.target.value,
+              }))
+            }
+            className={planInputClassName}
+            disabled={sharedValues}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`notes-${exercise.id}`}>Notas opcionales</Label>
+        <Textarea
+          id={`notes-${exercise.id}`}
+          value={exercise.notes}
+          onChange={(event) =>
+            updateExercise(dayId, exercise.id, (currentExercise) => ({
+              ...currentExercise,
+              notes: event.target.value,
+            }))
+          }
+          placeholder="Ej: mantener tecnica controlada o usar pausa al final."
+        />
+      </div>
+    </div>
+  )
 }
 
 function mapPlanToForm(plan: PlanDTO): PlanFormValues {
@@ -85,6 +204,7 @@ function mapPlanToForm(plan: PlanDTO): PlanFormValues {
         targetSets: String(exercise.targetSets),
         targetReps: String(exercise.targetReps),
         restSeconds: String(exercise.restSeconds),
+        supersetGroupId: exercise.supersetGroupId,
         notes: exercise.notes ?? '',
       })),
     })),
@@ -133,6 +253,7 @@ export function buildPlanInput(
         targetSets: parsePositiveInteger(exercise.targetSets) ?? 0,
         targetReps: parseTargetReps(exercise.targetReps) ?? '',
         restSeconds: parseNonNegativeInteger(exercise.restSeconds) ?? 0,
+        supersetGroupId: exercise.supersetGroupId,
         notes: exercise.notes.trim() || undefined,
       })),
     })),
@@ -249,7 +370,16 @@ export function PlanForm({
       exercises:
         day.exercises.length === 1
           ? day.exercises
-          : day.exercises.filter((exercise) => exercise.id !== exerciseId),
+          : (() => {
+              const removedExercise = day.exercises.find((exercise) => exercise.id === exerciseId)
+              return day.exercises
+                .filter((exercise) => exercise.id !== exerciseId)
+                .map((exercise) =>
+                  removedExercise?.supersetGroupId && exercise.supersetGroupId === removedExercise.supersetGroupId
+                    ? { ...exercise, supersetGroupId: undefined }
+                    : exercise,
+                )
+            })(),
     }))
   }
 
@@ -257,12 +387,24 @@ export function PlanForm({
     updateDay(dayId, (day) => {
       const index = day.exercises.findIndex((exercise) => exercise.id === exerciseId)
       if (index === -1) return day
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= day.exercises.length) return day
-
       const exercises = [...day.exercises]
-      const [moved] = exercises.splice(index, 1)
-      exercises.splice(targetIndex, 0, moved)
+      const groupId = exercises[index].supersetGroupId
+      const groupStart = groupId && exercises[index - 1]?.supersetGroupId === groupId ? index - 1 : index
+      const groupLength = groupId ? 2 : 1
+      const adjacentIndex = direction === 'up' ? groupStart - 1 : groupStart + groupLength
+      if (adjacentIndex < 0 || adjacentIndex >= day.exercises.length) return day
+
+      const adjacentGroupId = exercises[adjacentIndex].supersetGroupId
+      const adjacentGroupStart =
+        adjacentGroupId && exercises[adjacentIndex - 1]?.supersetGroupId === adjacentGroupId
+          ? adjacentIndex - 1
+          : adjacentIndex
+      const adjacentGroupLength = adjacentGroupId ? 2 : 1
+
+      const moved = exercises.splice(groupStart, groupLength)
+      const insertionIndex =
+        direction === 'up' ? adjacentGroupStart : groupStart + adjacentGroupLength
+      exercises.splice(insertionIndex, 0, ...moved)
       return { ...day, exercises }
     })
   }
@@ -272,9 +414,64 @@ export function PlanForm({
     exerciseId: string,
     updater: (exercise: ExerciseForm) => ExerciseForm,
   ) {
+    updateDay(dayId, (day) => {
+      const currentExercise = day.exercises.find((exercise) => exercise.id === exerciseId)
+      if (!currentExercise) return day
+
+      const nextExercise = updater(currentExercise)
+      const syncSupersetValues = Boolean(nextExercise.supersetGroupId) && (
+        nextExercise.targetSets !== currentExercise.targetSets || nextExercise.restSeconds !== currentExercise.restSeconds
+      )
+
+      return {
+        ...day,
+        exercises: day.exercises.map((exercise) => {
+          if (exercise.id === exerciseId) return nextExercise
+          if (syncSupersetValues && exercise.supersetGroupId === nextExercise.supersetGroupId) {
+            return {
+              ...exercise,
+              targetSets: nextExercise.targetSets,
+              restSeconds: nextExercise.restSeconds,
+            }
+          }
+          return exercise
+        }),
+      }
+    })
+  }
+
+  function groupExerciseWithNext(dayId: string, exerciseId: string) {
+    updateDay(dayId, (day) => {
+      const index = day.exercises.findIndex((exercise) => exercise.id === exerciseId)
+      const currentExercise = day.exercises[index]
+      if (index === -1 || currentExercise.supersetGroupId) {
+        return day
+      }
+
+      const supersetGroupId = createId('superset')
+      return {
+        ...day,
+        exercises: [
+          ...day.exercises.slice(0, index),
+          { ...currentExercise, supersetGroupId },
+          {
+            ...createExerciseForm(),
+            supersetGroupId,
+            targetSets: currentExercise.targetSets,
+            restSeconds: currentExercise.restSeconds,
+          },
+          ...day.exercises.slice(index + 1),
+        ],
+      }
+    })
+  }
+
+  function ungroupExercise(dayId: string, supersetGroupId: string) {
     updateDay(dayId, (day) => ({
       ...day,
-      exercises: day.exercises.map((exercise) => (exercise.id === exerciseId ? updater(exercise) : exercise)),
+      exercises: day.exercises.map((exercise) =>
+        exercise.supersetGroupId === supersetGroupId ? { ...exercise, supersetGroupId: undefined } : exercise,
+      ),
     }))
   }
 
@@ -401,17 +598,50 @@ export function PlanForm({
               </div>
 
               <div className="flex flex-col gap-3">
-                {day.exercises.map((exercise, exerciseIndex) => (
-                  <div key={exercise.id} className="rounded-2xl border border-border/70 bg-secondary/40 p-3">
+                {day.exercises.map((exercise, exerciseIndex) => {
+                  const isSuperset = Boolean(exercise.supersetGroupId)
+                  const isSupersetSecond =
+                    isSuperset && day.exercises[exerciseIndex - 1]?.supersetGroupId === exercise.supersetGroupId
+                  if (isSupersetSecond) {
+                    return null
+                  }
+
+                  const supersetPartner =
+                    isSuperset && day.exercises[exerciseIndex + 1]?.supersetGroupId === exercise.supersetGroupId
+                      ? day.exercises[exerciseIndex + 1]
+                      : undefined
+                  const supersetStartIndex = isSupersetSecond ? exerciseIndex - 1 : exerciseIndex
+                  const supersetGroupIndex = exercise.supersetGroupId
+                    ? Array.from(
+                        new Set(
+                          day.exercises.flatMap((item) => item.supersetGroupId ? [item.supersetGroupId] : []),
+                        ),
+                      ).indexOf(exercise.supersetGroupId)
+                    : -1
+                  const supersetLabel = String.fromCharCode(65 + supersetGroupIndex)
+                  const canGroupWithNext = !isSuperset
+
+                  return (
+                  <div
+                    key={exercise.id}
+                    className={`rounded-2xl border p-3 ${
+                      isSuperset ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-secondary/40'
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-3 mb-3">
-                      <p className="text-sm font-medium">Ejercicio {exerciseIndex + 1}</p>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {isSuperset ? `Superserie ${supersetLabel} · A1` : `Ejercicio ${exerciseIndex + 1}`}
+                        </p>
+                        {isSuperset ? <p className="text-xs text-primary">Descanso compartido al terminar A2</p> : null}
+                      </div>
                       <div className="flex items-center gap-1">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => moveExercise(day.id, exercise.id, 'up')}
-                          disabled={exerciseIndex === 0}
+                          disabled={supersetStartIndex === 0}
                         >
                           <ArrowUp className="w-4 h-4" />
                           <span className="sr-only">Subir ejercicio</span>
@@ -421,7 +651,7 @@ export function PlanForm({
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => moveExercise(day.id, exercise.id, 'down')}
-                          disabled={exerciseIndex === day.exercises.length - 1}
+                          disabled={supersetStartIndex + (isSuperset ? 2 : 1) === day.exercises.length}
                         >
                           <ArrowDown className="w-4 h-4" />
                           <span className="sr-only">Bajar ejercicio</span>
@@ -436,6 +666,29 @@ export function PlanForm({
                           <Trash2 className="w-4 h-4" />
                           <span className="sr-only">Eliminar ejercicio</span>
                         </Button>
+                        {isSuperset ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-primary"
+                            onClick={() => ungroupExercise(day.id, exercise.supersetGroupId!)}
+                          >
+                            <Unlink className="w-3.5 h-3.5" />
+                            Desagrupar
+                          </Button>
+                        ) : canGroupWithNext ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-primary"
+                            onClick={() => groupExerciseWithNext(day.id, exercise.id)}
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                            Superserie
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -467,7 +720,7 @@ export function PlanForm({
 
                       <div className="grid grid-cols-3 gap-3">
                         <div className="flex flex-col gap-2">
-                          <Label htmlFor={`sets-${exercise.id}`}>Series</Label>
+                          <Label htmlFor={`sets-${exercise.id}`}>{isSupersetSecond ? 'Series compartidas' : 'Series'}</Label>
                           <Input
                             id={`sets-${exercise.id}`}
                             type="number"
@@ -480,6 +733,7 @@ export function PlanForm({
                               }))
                             }
                             className={planInputClassName}
+                            disabled={isSupersetSecond}
                           />
                         </div>
                         <div className="flex flex-col gap-2">
@@ -499,7 +753,7 @@ export function PlanForm({
                           />
                         </div>
                         <div className="flex flex-col gap-2">
-                          <Label htmlFor={`rest-${exercise.id}`}>Descanso</Label>
+                          <Label htmlFor={`rest-${exercise.id}`}>{isSupersetSecond ? 'Descanso compartido' : 'Descanso'}</Label>
                           <Input
                             id={`rest-${exercise.id}`}
                             type="number"
@@ -512,6 +766,7 @@ export function PlanForm({
                               }))
                             }
                             className={planInputClassName}
+                            disabled={isSupersetSecond}
                           />
                         </div>
                       </div>
@@ -530,9 +785,37 @@ export function PlanForm({
                           placeholder="Ej: mantener tecnica controlada o usar pausa al final."
                         />
                       </div>
+                      {isSuperset && supersetPartner ? (
+                        <div className="rounded-xl border border-primary/25 bg-background/50 p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-primary">{supersetLabel}2</p>
+                              <p className="text-xs text-muted-foreground">Segundo ejercicio de la superserie</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => removeExercise(day.id, supersetPartner.id)}
+                              disabled={day.exercises.length === 1}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span className="sr-only">Eliminar segundo ejercicio</span>
+                            </Button>
+                          </div>
+                          <PlanExerciseFields
+                            dayId={day.id}
+                            exercise={supersetPartner}
+                            sharedValues
+                            planInputClassName={planInputClassName}
+                            updateExercise={updateExercise}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               <Button

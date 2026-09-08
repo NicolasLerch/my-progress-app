@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Pencil, Play, Trash2 } from 'lucide-react'
-import type { PlanDTO } from '@my-progress/shared'
+import type { PlanDTO, PlanExerciseDTO } from '@my-progress/shared'
 import { AppLoadingIndicator } from '@/components/app-loading-indicator'
 import { toast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
@@ -22,6 +22,25 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAuthReady } from '@/hooks/use-auth-ready'
+
+function getExerciseBlocks(exercises: PlanExerciseDTO[]) {
+  const blocks: PlanExerciseDTO[][] = []
+
+  for (let index = 0; index < exercises.length; index += 1) {
+    const exercise = exercises[index]
+    const nextExercise = exercises[index + 1]
+
+    if (exercise.supersetGroupId && nextExercise?.supersetGroupId === exercise.supersetGroupId) {
+      blocks.push([exercise, nextExercise])
+      index += 1
+      continue
+    }
+
+    blocks.push([exercise])
+  }
+
+  return blocks
+}
 
 export default function PlanDetailPage() {
   const params = useParams<{ id: string }>()
@@ -104,12 +123,26 @@ export default function PlanDetailPage() {
               <span className="text-xs text-muted-foreground">Dia {day.order}</span>
             </div>
             <div className="flex flex-col gap-2">
-              {day.exercises.map((exercise) => (
-                <div key={exercise.id} className="rounded-xl bg-secondary/60 px-3 py-2">
-                  <p className="text-sm font-medium">{exercise.exerciseName}</p>
+              {getExerciseBlocks(day.exercises).map((block) => (
+                <div key={block[0].id} className="rounded-xl bg-secondary/60 px-3 py-2">
+                  {block.length === 2 ? (
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Superserie
+                    </p>
+                  ) : null}
+                  <div className={block.length === 2 ? "flex flex-col divide-y divide-border/60" : ""}>
+                    {block.map((exercise, exerciseIndex) => (
+                      <div key={exercise.id} className={block.length === 2 ? "py-2 first:pt-0 last:pb-0" : ""}>
+                  <p className="text-sm font-medium">
+                    {block.length === 2 ? `${exerciseIndex === 0 ? 'A1' : 'A2'} · ` : null}
+                    {exercise.exerciseName}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {exercise.targetSets} x {exercise.targetReps} · descanso {exercise.restSeconds}s
                   </p>
+                </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

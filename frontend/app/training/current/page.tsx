@@ -99,6 +99,37 @@ function getExerciseCompletion(exercise: WorkoutExerciseDTO) {
   return exercise.sets.length > 0
 }
 
+function getSupersetMembers(session: Pick<WorkoutSessionDTO, "exercises">, exercise: WorkoutExerciseDTO) {
+  if (!exercise.supersetGroupId) {
+    return []
+  }
+
+  return session.exercises
+    .filter((item) => item.supersetGroupId === exercise.supersetGroupId)
+    .sort((left, right) => left.position - right.position)
+}
+
+function getWorkoutExerciseBlocks(exercises: WorkoutExerciseDTO[]) {
+  const blocks: WorkoutExerciseDTO[][] = []
+
+  for (let index = 0; index < exercises.length; index += 1) {
+    const exercise = exercises[index]
+    const members = getSupersetMembers({ exercises }, exercise)
+
+    if (members.length === 2 && members[0].id === exercise.id) {
+      blocks.push(members)
+      index += 1
+      continue
+    }
+
+    if (members.length !== 2) {
+      blocks.push([exercise])
+    }
+  }
+
+  return blocks
+}
+
 function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
   return session.exercises.reduce<Record<string, ExerciseUiState>>((accumulator, exercise, index) => {
     accumulator[exercise.id] = {
@@ -195,6 +226,7 @@ export default function TrainingCurrentPage() {
   const sessionRef = useRef<WorkoutSessionDTO | null>(null)
   const pendingSyncCountRef = useRef(0)
   const notificationCompletionSessionRef = useRef<string | null>(null)
+  const notifiedRestTimerStartsRef = useRef<Record<string, number>>({})
 
   useEffect(() => {
     sessionRef.current = session
@@ -323,17 +355,33 @@ export default function TrainingCurrentPage() {
         return []
       }
 
-      return [{ exercise, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+      return [{ exercise, timer, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+    })
+
+    const activeTimerKeys = new Set(
+      Object.entries(restTimers).map(([workoutExerciseId, timer]) => `${session.id}:${workoutExerciseId}:${timer.startedAt}`),
+    )
+    Object.keys(notifiedRestTimerStartsRef.current).forEach((key) => {
+      if (!activeTimerKeys.has(key)) {
+        delete notifiedRestTimerStartsRef.current[key]
+      }
     })
 
     if (document.visibilityState === "visible") {
-      expiredTimers.forEach(({ exercise }) => {
+      expiredTimers.forEach(({ exercise, timer }) => {
+        notifiedRestTimerStartsRef.current[`${session.id}:${exercise.id}:${timer.startedAt}`] = timer.startedAt
         void closeRestTimerNotification(session.id, exercise.id).catch(() => {})
       })
       return
     }
 
-    expiredTimers.forEach(({ exercise, overtimeSeconds }) => {
+    expiredTimers.forEach(({ exercise, timer, overtimeSeconds }) => {
+      const notificationKey = `${session.id}:${exercise.id}:${timer.startedAt}`
+      if (notifiedRestTimerStartsRef.current[notificationKey] === timer.startedAt) {
+        return
+      }
+
+      notifiedRestTimerStartsRef.current[notificationKey] = timer.startedAt
       void showRestTimerNotification({
         sessionId: session.id,
         workoutExerciseId: exercise.id,
@@ -585,18 +633,27 @@ export default function TrainingCurrentPage() {
         editingSetNumber: undefined,
       },
     }
+    const supersetMembers = getSupersetMembers(nextSession, exercise)
+    const isSuperset = supersetMembers.length === 2
+    const restTimerExerciseId = isSuperset ? supersetMembers[1].id : workoutExerciseId
+    const isSupersetLastExercise = isSuperset && restTimerExerciseId === workoutExerciseId
     const nextRestTimers = editingSetNumber
       ? restTimers
-      : {
-          ...restTimers,
-          [workoutExerciseId]: { startedAt: Date.now() },
-        }
+      : isSupersetLastExercise || !isSuperset
+        ? { [restTimerExerciseId]: { startedAt: Date.now() } }
+        : {}
+    const stoppedRestTimerExerciseIds = Object.keys(restTimers).filter(
+      (exerciseId) => !nextRestTimers[exerciseId],
+    )
 
     setSession(nextSession)
     setExerciseUiState(nextExerciseState)
     setRestTimers(nextRestTimers)
     if (!editingSetNumber) {
-      void closeRestTimerNotification(session.id, workoutExerciseId).catch(() => {})
+      void closeRestTimerNotification(session.id, restTimerExerciseId).catch(() => {})
+      stoppedRestTimerExerciseIds.forEach((exerciseId) => {
+        void closeRestTimerNotification(session.id, exerciseId).catch(() => {})
+      })
     }
     await saveSessionSnapshot(nextSession)
     await persistTrainingDraft({ exercises: nextExerciseState, restTimers: nextRestTimers })
@@ -835,11 +892,44 @@ export default function TrainingCurrentPage() {
           </Card>
         ) : (
           <div className="flex flex-col gap-3">
-            {session.exercises.map((exercise, exerciseIndex) => (
+            {getWorkoutExerciseBlocks(session.exercises).map((block) => {
+              const isSupersetBlock = block.length === 2
+
+              return (
+                <div
+                  key={block[0].id}
+                  className={isSupersetBlock ? "flex flex-col gap-2 rounded-2xl border border-primary/30 bg-primary/[0.03] p-2" : "contents"}
+                >
+                  {isSupersetBlock ? (
+                    <p className="px-2 pt-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                      Superserie {String.fromCharCode(65 + getWorkoutExerciseBlocks(session.exercises).filter((item) => item.length === 2).findIndex((item) => item[0].id === block[0].id))}
+                    </p>
+                  ) : null}
+                  {block.map((exercise) => {
+              const exerciseIndex = session.exercises.findIndex((item) => item.id === exercise.id)
+              const supersetMembers = getSupersetMembers(session, exercise)
+              const supersetGroupIndex = exercise.supersetGroupId
+                ? Array.from(
+                    new Set(
+                      session.exercises.flatMap((item) => item.supersetGroupId ? [item.supersetGroupId] : []),
+                    ),
+                  ).indexOf(exercise.supersetGroupId)
+                : -1
+              const supersetPosition =
+                supersetMembers.length === 2
+                  ? supersetMembers[0].id === exercise.id
+                    ? `${String.fromCharCode(65 + supersetGroupIndex)}1`
+                    : `${String.fromCharCode(65 + supersetGroupIndex)}2`
+                  : undefined
+              const restTimerExerciseId = supersetMembers.length === 2 ? supersetMembers[1].id : exercise.id
+              const showsSupersetRestTimer = supersetMembers.length !== 2 || restTimerExerciseId === exercise.id
+
+              return (
               <ExerciseCard
                 key={exercise.id}
                 exercise={exercise}
                 exerciseIndex={exerciseIndex}
+                supersetPosition={supersetPosition}
                 state={exerciseUiState[exercise.id] ?? { expanded: exerciseIndex === 0, weight: "", reps: "" }}
                 previousPerformance={previousPerformanceByExercise[exercise.exerciseId]}
                 onToggleExpand={() =>
@@ -880,11 +970,15 @@ export default function TrainingCurrentPage() {
                 }
                 onSave={() => saveSet(exercise.id)}
                 onReplace={!planless && exercise.sets.length === 0 ? () => openReplaceDialog(exercise) : undefined}
-                restTimer={restTimers[exercise.id]}
+                restTimer={showsSupersetRestTimer ? restTimers[restTimerExerciseId] : undefined}
                 now={clockNow}
-                onToggleRestTimer={() => toggleRestTimer(exercise.id)}
+                onToggleRestTimer={() => toggleRestTimer(restTimerExerciseId)}
               />
-            ))}
+              )
+                  })}
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -969,7 +1063,7 @@ export default function TrainingCurrentPage() {
               disabled={cancellingWorkout}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {cancellingWorkout ? "Cancelando..." : "Confirmar cancelacion"}
+              {cancellingWorkout ? "Cancelando..." : "Confirmar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1059,6 +1153,7 @@ export default function TrainingCurrentPage() {
 function ExerciseCard({
   exercise,
   exerciseIndex,
+  supersetPosition,
   state,
   previousPerformance,
   onToggleExpand,
@@ -1073,6 +1168,7 @@ function ExerciseCard({
 }: {
   exercise: WorkoutExerciseDTO
   exerciseIndex: number
+  supersetPosition?: string
   state: ExerciseUiState
   previousPerformance?: PreviousPerformance
   onToggleExpand: () => void
@@ -1099,6 +1195,7 @@ function ExerciseCard({
       className={cn(
         "overflow-hidden border-border/70 bg-card transition-all duration-200",
         completed && "border-primary/30 bg-primary/5",
+        supersetPosition && "border-primary/40",
       )}
     >
       <CardContent className="p-0">
@@ -1118,6 +1215,11 @@ function ExerciseCard({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className={cn("font-medium", completed && "text-primary")}>{exercise.exerciseName}</p>
+              {supersetPosition ? (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  Superserie {supersetPosition}
+                </span>
+              ) : null}
               {exercise.isReplacement ? (
                 <span className="rounded-full bg-secondary/90 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                   Reemplazo del plan
@@ -1271,8 +1373,8 @@ function ExerciseCard({
                       {exercise.restSeconds === 0
                         ? `Cronómetro ${formatTimerSeconds(elapsedRestSeconds)}`
                         : remainingRestSeconds > 0
-                          ? `Pausa ${formatTimerSeconds(remainingRestSeconds)}`
-                          : `Pausa +${formatTimerSeconds(overtimeSeconds)}`}
+                          ? `Descanso ${formatTimerSeconds(remainingRestSeconds)}`
+                          : `Descanso +${formatTimerSeconds(overtimeSeconds)}`}
                     </p>
                     <p>
                       {restTimer.pausedAt

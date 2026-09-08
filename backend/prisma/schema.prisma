@@ -80,6 +80,7 @@ model PlanExercise {
   targetSets  Int
   targetReps  String
   restSeconds Int
+  supersetGroupId String?
   notes       String?
   planDay     PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
   exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
@@ -121,6 +122,7 @@ model WorkoutExercise {
   targetSets        Int
   targetReps        String
   restSeconds       Int
+  supersetGroupId   String?
   notes             String?
   workoutSession    WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
   exercise          Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)

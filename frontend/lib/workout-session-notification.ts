@@ -59,12 +59,18 @@ export async function showRestTimerNotification(input: {
   const seconds = input.overtimeSeconds % 60
   const overtime = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
   const registration = await navigator.serviceWorker.ready
+  const tag = getRestTimerNotificationTag(input.sessionId, input.workoutExerciseId)
+  const existingNotifications = await registration.getNotifications({ tag })
+  if (existingNotifications.length > 0) {
+    return
+  }
+
   const options: NotificationOptions & { renotify: boolean } = {
     body: `Continúa con la próxima serie. Exceso: ${overtime}`,
     icon: "/apple-icon.png",
     badge: "/icon-light-32x32.png",
-    tag: getRestTimerNotificationTag(input.sessionId, input.workoutExerciseId),
-    requireInteraction: true,
+    tag,
+    requireInteraction: false,
     renotify: false,
     data: { sessionId: input.sessionId },
   }
