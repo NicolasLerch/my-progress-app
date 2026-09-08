@@ -226,6 +226,7 @@ export default function TrainingCurrentPage() {
   const sessionRef = useRef<WorkoutSessionDTO | null>(null)
   const pendingSyncCountRef = useRef(0)
   const notificationCompletionSessionRef = useRef<string | null>(null)
+  const notifiedRestTimerStartsRef = useRef<Record<string, number>>({})
 
   useEffect(() => {
     sessionRef.current = session
@@ -354,17 +355,33 @@ export default function TrainingCurrentPage() {
         return []
       }
 
-      return [{ exercise, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+      return [{ exercise, timer, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+    })
+
+    const activeTimerKeys = new Set(
+      Object.entries(restTimers).map(([workoutExerciseId, timer]) => `${session.id}:${workoutExerciseId}:${timer.startedAt}`),
+    )
+    Object.keys(notifiedRestTimerStartsRef.current).forEach((key) => {
+      if (!activeTimerKeys.has(key)) {
+        delete notifiedRestTimerStartsRef.current[key]
+      }
     })
 
     if (document.visibilityState === "visible") {
-      expiredTimers.forEach(({ exercise }) => {
+      expiredTimers.forEach(({ exercise, timer }) => {
+        notifiedRestTimerStartsRef.current[`${session.id}:${exercise.id}:${timer.startedAt}`] = timer.startedAt
         void closeRestTimerNotification(session.id, exercise.id).catch(() => {})
       })
       return
     }
 
-    expiredTimers.forEach(({ exercise, overtimeSeconds }) => {
+    expiredTimers.forEach(({ exercise, timer, overtimeSeconds }) => {
+      const notificationKey = `${session.id}:${exercise.id}:${timer.startedAt}`
+      if (notifiedRestTimerStartsRef.current[notificationKey] === timer.startedAt) {
+        return
+      }
+
+      notifiedRestTimerStartsRef.current[notificationKey] = timer.startedAt
       void showRestTimerNotification({
         sessionId: session.id,
         workoutExerciseId: exercise.id,
@@ -620,28 +637,13 @@ export default function TrainingCurrentPage() {
     const isSuperset = supersetMembers.length === 2
     const restTimerExerciseId = isSuperset ? supersetMembers[1].id : workoutExerciseId
     const isSupersetLastExercise = isSuperset && restTimerExerciseId === workoutExerciseId
-    const timersWithoutCurrentSuperset = isSuperset
-      ? Object.fromEntries(
-          Object.entries(restTimers).filter(([exerciseId]) => !supersetMembers.some((item) => item.id === exerciseId)),
-        )
-      : restTimers
-    const timersWithCurrentRest = editingSetNumber
-      ? restTimers
-      : isSupersetLastExercise
-        ? { ...timersWithoutCurrentSuperset, [restTimerExerciseId]: { startedAt: Date.now() } }
-        : timersWithoutCurrentSuperset
-    const completedExerciseIds = new Set(
-      nextSession.exercises.filter(getExerciseCompletion).map((item) => item.id),
-    )
     const nextRestTimers = editingSetNumber
-      ? timersWithCurrentRest
-      : Object.fromEntries(
-          Object.entries(timersWithCurrentRest).filter(
-            ([exerciseId]) => exerciseId === restTimerExerciseId || !completedExerciseIds.has(exerciseId),
-          ),
-        )
-    const stoppedRestTimerExerciseIds = Object.keys(timersWithCurrentRest).filter(
-      (exerciseId) => exerciseId !== restTimerExerciseId && !nextRestTimers[exerciseId],
+      ? restTimers
+      : isSupersetLastExercise || !isSuperset
+        ? { [restTimerExerciseId]: { startedAt: Date.now() } }
+        : {}
+    const stoppedRestTimerExerciseIds = Object.keys(restTimers).filter(
+      (exerciseId) => !nextRestTimers[exerciseId],
     )
 
     setSession(nextSession)
