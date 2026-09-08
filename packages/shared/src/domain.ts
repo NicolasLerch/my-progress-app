@@ -37,6 +37,7 @@ export interface PlanExerciseDTO {
   targetSets: number
   targetReps: string
   restSeconds: number
+  supersetGroupId?: string
   notes?: string
 }
 
@@ -87,6 +88,7 @@ export interface WorkoutExerciseDTO {
   targetSets: number
   targetReps: string
   restSeconds: number
+  supersetGroupId?: string
   notes?: string
   sets: WorkoutSetDTO[]
 }
@@ -242,6 +244,7 @@ export interface CreatePlanInputDTO {
       targetSets: number
       targetReps: string
       restSeconds: number
+      supersetGroupId?: string
       notes?: string
     }>
   }>

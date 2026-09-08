@@ -3,6 +3,73 @@ import { z } from "zod"
 export const planStatusSchema = z.enum(["draft", "active", "archived", "completed"])
 export const workoutSessionStatusSchema = z.enum(["in_progress", "completed", "abandoned"])
 const targetRepsSchema = z.string().trim().min(1).max(30)
+const supersetGroupIdSchema = z.string().trim().min(1).max(100).optional()
+
+const planExerciseInputSchema = z.object({
+  order: z.number().int().positive(),
+  exerciseId: z.string().min(1),
+  exerciseName: z.string().min(2),
+  targetSets: z.number().int().positive(),
+  targetReps: targetRepsSchema,
+  restSeconds: z.number().int().nonnegative(),
+  supersetGroupId: supersetGroupIdSchema,
+  notes: z.string().max(300).optional(),
+})
+
+function validatePlanExercises(
+  exercises: Array<z.infer<typeof planExerciseInputSchema>>,
+  context: z.RefinementCtx,
+) {
+  const orders = new Set<number>()
+  exercises.forEach((exercise, index) => {
+    if (orders.has(exercise.order)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El orden de los ejercicios debe ser unico dentro del dia.",
+        path: [index, "order"],
+      })
+    }
+    orders.add(exercise.order)
+  })
+
+  const sortedOrders = [...orders].sort((left, right) => left - right)
+  if (sortedOrders.some((order, index) => order !== index + 1)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "El orden de los ejercicios debe ser consecutivo y comenzar en 1.",
+    })
+  }
+
+  const groups = new Map<string, Array<{ exercise: z.infer<typeof planExerciseInputSchema>; index: number }>>()
+  exercises.forEach((exercise, index) => {
+    if (!exercise.supersetGroupId) return
+    const members = groups.get(exercise.supersetGroupId) ?? []
+    members.push({ exercise, index })
+    groups.set(exercise.supersetGroupId, members)
+  })
+
+  groups.forEach((members, groupId) => {
+    const sortedMembers = [...members].sort((left, right) => left.exercise.order - right.exercise.order)
+    const [first, second] = sortedMembers
+    const invalid =
+      members.length !== 2 ||
+      !first ||
+      !second ||
+      second.exercise.order !== first.exercise.order + 1 ||
+      second.exercise.targetSets !== first.exercise.targetSets ||
+      second.exercise.restSeconds !== first.exercise.restSeconds
+
+    if (invalid) {
+      members.forEach(({ index }) => {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `La superserie ${groupId} debe tener dos ejercicios consecutivos con las mismas series y descanso.`,
+          path: [index, "supersetGroupId"],
+        })
+      })
+    }
+  })
+}
 
 export const workoutSetInputSchema = z.object({
   id: z.string().optional(),
@@ -44,37 +111,7 @@ export const createPlanInputSchema = z.object({
     z.object({
       name: z.string().min(2).max(100),
       order: z.number().int().positive(),
-      exercises: z.array(
-        z.object({
-          order: z.number().int().positive(),
-          exerciseId: z.string().min(1),
-          exerciseName: z.string().min(2),
-          targetSets: z.number().int().positive(),
-          targetReps: targetRepsSchema,
-          restSeconds: z.number().int().nonnegative(),
-          notes: z.string().max(300).optional(),
-        }),
-      ).min(1).superRefine((exercises, context) => {
-        const orders = new Set<number>()
-        exercises.forEach((exercise, index) => {
-          if (orders.has(exercise.order)) {
-            context.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: "El orden de los ejercicios debe ser unico dentro del dia.",
-              path: [index, "order"],
-            })
-          }
-          orders.add(exercise.order)
-        })
-
-        const sortedOrders = [...orders].sort((left, right) => left - right)
-        if (sortedOrders.some((order, index) => order !== index + 1)) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "El orden de los ejercicios debe ser consecutivo y comenzar en 1.",
-          })
-        }
-      }),
+      exercises: z.array(planExerciseInputSchema).min(1).superRefine(validatePlanExercises),
     }),
   ).min(1),
 })
@@ -82,38 +119,7 @@ export const createPlanInputSchema = z.object({
 export const updatePlanDayInputSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   order: z.number().int().positive().optional(),
-  exercises: z.array(
-    z.object({
-      id: z.string().optional(),
-      order: z.number().int().positive(),
-      exerciseId: z.string().min(1),
-      exerciseName: z.string().min(2),
-      targetSets: z.number().int().positive(),
-      targetReps: targetRepsSchema,
-      restSeconds: z.number().int().nonnegative(),
-      notes: z.string().max(300).optional(),
-    }),
-  ).superRefine((exercises, context) => {
-    const orders = new Set<number>()
-    exercises.forEach((exercise, index) => {
-      if (orders.has(exercise.order)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "El orden de los ejercicios debe ser unico dentro del dia.",
-          path: [index, "order"],
-        })
-      }
-      orders.add(exercise.order)
-    })
-
-    const sortedOrders = [...orders].sort((left, right) => left - right)
-    if (sortedOrders.some((order, index) => order !== index + 1)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "El orden de los ejercicios debe ser consecutivo y comenzar en 1.",
-      })
-    }
-  }).optional(),
+  exercises: z.array(planExerciseInputSchema.extend({ id: z.string().optional() })).superRefine(validatePlanExercises).optional(),
 })
 
 export const updateWorkoutSessionInputSchema = z.object({
