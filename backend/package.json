@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:compiled": "pnpm build && node --test test/compiled-extraction.check.mjs",
+    "test": "pnpm --filter @my-progress/shared build && tsx --test test/*.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "pnpm --filter @my-progress/shared build && tsc -p tsconfig.json",
     "start": "node dist/server.js",
@@ -16,11 +18,15 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^10.1.1",
     "@my-progress/shared": "workspace:*",
     "@prisma/client": "^6.9.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.1.0",
     "jose": "^5.10.0",
+    "openai": "^7.13.0",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -13,6 +13,9 @@ import { z } from "zod"
 import { prisma } from "./lib/prisma.js"
 import { requireUser } from "./plugins/auth.js"
 import { PrismaRepository } from "./repositories/prisma-repository.js"
+import { registerRoutineImport } from './services/routine-import/routes.js'
+import { FileImportService } from './services/routine-import/service.js'
+import { RoutineImportError } from './services/routine-import/errors.js'
 
 const exerciseSearchQuerySchema = z.object({
   query: z.string().trim().max(100).optional(),
@@ -23,6 +26,7 @@ export async function registerRoutes(app: FastifyInstance) {
   const repository = new PrismaRepository(prisma)
 
   app.addHook("preHandler", requireUser)
+  await registerRoutineImport(app, new FileImportService(() => prisma.exercise.findMany({ select: { id: true, name: true, muscleGroup: true } })))
 
   app.get("/health", async () => ({ ok: true }))
 
@@ -45,9 +49,16 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/plans", async (request) => await repository.getPlans(request.user.id))
 
   app.post("/plans", async (request, reply) => {
-    const input = createPlanInputSchema.parse(request.body)
-    const plan = await repository.createPlan(request.user.id, input)
-    return reply.code(201).send(plan)
+    const parsed = createPlanInputSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_PLAN', message: 'Revisá los datos del plan.', issues: parsed.error.issues })
+    try {
+      const plan = await repository.createPlan(request.user.id, parsed.data)
+      return reply.code(201).send(plan)
+    } catch (error: unknown) {
+      if (error instanceof RoutineImportError) return reply.code(error.statusCode).send({ code: error.code, message: error.message })
+      request.log.error({ code: 'PLAN_CREATE_FAILED' }, 'Plan creation failed')
+      return reply.code(500).send({ code: 'PLAN_CREATE_FAILED', message: 'No se pudo crear el plan. Revisá los ejercicios e intentá nuevamente.' })
+    }
   })
 
   app.get("/plans/:id", async (request, reply) => {

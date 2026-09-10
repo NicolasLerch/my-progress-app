@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Link2, Plus, Trash2, Unlink } from 'lucide-react'
 import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shared'
+import { createPlanInputSchema, importedExerciseNotes, importedExerciseReps, type RoutineImportResult } from '@my-progress/shared'
 import { api } from '@/lib/api'
 import { useAuthReady } from '@/hooks/use-auth-ready'
 import { ExerciseSearchSelect } from '@/components/exercise-search-select'
@@ -24,6 +25,7 @@ type ExerciseForm = {
   restSeconds: string
   supersetGroupId?: string
   notes: string
+  imported?: RoutineImportResult['routine']['days'][number]['exercises'][number]
 }
 
 type DayForm = {
@@ -44,6 +46,7 @@ type PlanFormProps = {
   submitLabel: string
   submittingLabel: string
   initialPlan?: PlanDTO
+  importedRoutine?: RoutineImportResult
   onSubmit: (values: PlanFormValues) => Promise<void>
 }
 
@@ -52,6 +55,31 @@ type UpdateExercise = (
   exerciseId: string,
   updater: (exercise: ExerciseForm) => ExerciseForm,
 ) => void
+
+function ImportReview({ exercise }: { exercise: ExerciseForm }) {
+  const source = exercise.imported
+  if (!source) return null
+  const labels = { high: 'Coincidencia exacta', medium: 'Sugerencia aproximada: revisá el ejercicio seleccionado', low: 'Sugerencia dudosa: revisá el ejercicio seleccionado', unresolved: 'Sin coincidencia: seleccioná un ejercicio' }
+  const changed = Boolean(exercise.exerciseId) && exercise.exerciseId !== source.match.exercise?.id
+  return <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm space-y-2">
+    <p><span className="font-medium">En el archivo:</span> {source.originalName}</p>
+    <p>{changed ? 'Ejercicio seleccionado manualmente' : labels[source.match.status]}</p>
+    {source.weight !== null ? <p>Peso indicado: {source.weight} {source.weightUnit ?? '(unidad no indicada)'} · Conservado en notas.</p> : null}
+  </div>
+}
+
+function mapImportToForm(result: RoutineImportResult): PlanFormValues {
+  return {
+    name: result.routine.name?.trim() || 'Rutina importada',
+    days: result.routine.days.map((day, index) => ({
+      id: day.id, name: day.name?.trim() || `Día ${index + 1}`,
+      exercises: day.exercises.map(source => {
+        const selected = source.match.status !== 'unresolved' ? source.match.exercise : null
+        return { id: source.id, exerciseId: selected?.id ?? '', exerciseName: selected?.name ?? '', muscleGroup: selected?.muscleGroup ?? '', targetSets: source.sets === null ? '' : String(source.sets), targetReps: importedExerciseReps(source), restSeconds: source.restSeconds === null ? '' : String(source.restSeconds), notes: importedExerciseNotes(source), supersetGroupId: source.supersetGroupId ?? undefined, imported: source }
+      }),
+    })),
+  }
+}
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
@@ -94,6 +122,7 @@ function PlanExerciseFields({
 }) {
   return (
     <div className="flex flex-col gap-3">
+      <ImportReview exercise={exercise} />
       <div className="flex flex-col gap-2">
         <Label>Ejercicio</Label>
         <ExerciseSearchSelect
@@ -113,7 +142,7 @@ function PlanExerciseFields({
               ...currentExercise,
               exerciseId: selectedExercise.id,
               exerciseName: selectedExercise.name,
-              muscleGroup: selectedExercise.muscleGroup,
+                muscleGroup: selectedExercise.muscleGroup,
             }))
           }
         />
@@ -217,6 +246,7 @@ export function parsePositiveInteger(value: string) {
 }
 
 export function parseNonNegativeInteger(value: string) {
+  if (!value.trim()) return null
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
@@ -267,13 +297,16 @@ export function PlanForm({
   submitLabel,
   submittingLabel,
   initialPlan,
+  importedRoutine,
   onSubmit,
 }: PlanFormProps) {
+  const planNameId = useId()
+  const submitting = useRef(false)
   const planInputClassName =
     'border-border/70 bg-secondary/75 text-foreground placeholder:text-muted-foreground shadow-none'
 
-  const [name, setName] = useState(initialPlan?.name ?? 'Nuevo plan')
-  const [days, setDays] = useState<DayForm[]>(initialPlan ? mapPlanToForm(initialPlan).days : [createDayForm(0)])
+  const [name, setName] = useState(importedRoutine ? mapImportToForm(importedRoutine).name : initialPlan?.name ?? 'Nuevo plan')
+  const [days, setDays] = useState<DayForm[]>(importedRoutine ? mapImportToForm(importedRoutine).days : initialPlan ? mapPlanToForm(initialPlan).days : [createDayForm(0)])
   const [saving, setSaving] = useState(false)
   const { isLoading } = useAuthReady()
 
@@ -326,7 +359,15 @@ export function PlanForm({
       })
     })
 
-    return errors
+    const parsed = createPlanInputSchema.safeParse(buildPlanInput({ name, days }))
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        if (issue.path.includes('notes')) errors.push('Las notas deben tener como máximo 300 caracteres. Editalas sin perder los datos que querés conservar.')
+        else if (issue.path.includes('supersetGroupId')) errors.push('Las superseries deben tener dos ejercicios consecutivos con las mismas series y descanso.')
+        else if (issue.code === 'too_big') errors.push('Revisá la longitud de los nombres y repeticiones: máximo 100 y 30 caracteres respectivamente.')
+      }
+    }
+    return [...new Set(errors)]
   }, [days, name])
 
   const canSave = !saving && validationErrors.length === 0
@@ -340,7 +381,7 @@ export function PlanForm({
   }
 
   function removeDay(dayId: string) {
-    setDays((currentDays) => (currentDays.length === 1 ? currentDays : currentDays.filter((day) => day.id !== dayId)))
+    setDays((currentDays) => (currentDays.length === 1 && !importedRoutine ? currentDays : currentDays.filter((day) => day.id !== dayId)))
   }
 
   function moveDay(dayId: string, direction: 'up' | 'down') {
@@ -368,7 +409,7 @@ export function PlanForm({
     updateDay(dayId, (day) => ({
       ...day,
       exercises:
-        day.exercises.length === 1
+        day.exercises.length === 1 && !importedRoutine
           ? day.exercises
           : (() => {
               const removedExercise = day.exercises.find((exercise) => exercise.id === exerciseId)
@@ -476,15 +517,17 @@ export function PlanForm({
   }
 
   async function handleSubmit() {
-    if (!canSave) {
+    if (!canSave || submitting.current) {
       return
     }
 
+    submitting.current = true
     setSaving(true)
 
     try {
       await onSubmit({ name, days })
     } finally {
+      submitting.current = false
       setSaving(false)
     }
   }
@@ -507,9 +550,9 @@ export function PlanForm({
       <Card>
         <CardContent className="p-4 flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="plan-name">Nombre del plan</Label>
+            <Label htmlFor={planNameId}>Nombre del plan</Label>
             <Input
-              id="plan-name"
+              id={planNameId}
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Ej: Hipertrofia 4 dias"
@@ -518,6 +561,11 @@ export function PlanForm({
           </div>
         </CardContent>
       </Card>
+
+      {importedRoutine ? <div className="text-sm text-muted-foreground space-y-2">
+        <p>Revisá los ejercicios y valores antes de crear la rutina.</p>
+        {importedRoutine.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+      </div> : null}
 
       {isLoading ? (
         <Card>
@@ -589,7 +637,7 @@ export function PlanForm({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => removeDay(day.id)}
-                    disabled={days.length === 1}
+                    disabled={days.length === 1 && !importedRoutine}
                   >
                     <Trash2 className="w-4 h-4" />
                     <span className="sr-only">Eliminar dia</span>
@@ -661,7 +709,7 @@ export function PlanForm({
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => removeExercise(day.id, exercise.id)}
-                          disabled={day.exercises.length === 1}
+                          disabled={day.exercises.length === 1 && !importedRoutine}
                         >
                           <Trash2 className="w-4 h-4" />
                           <span className="sr-only">Eliminar ejercicio</span>
@@ -693,6 +741,7 @@ export function PlanForm({
                     </div>
 
                     <div className="flex flex-col gap-3">
+                      <ImportReview exercise={exercise} />
                       <div className="flex flex-col gap-2">
                         <Label>Ejercicio</Label>
                         <ExerciseSearchSelect
@@ -797,7 +846,7 @@ export function PlanForm({
                               variant="ghost"
                               size="icon-sm"
                               onClick={() => removeExercise(day.id, supersetPartner.id)}
-                              disabled={day.exercises.length === 1}
+                              disabled={day.exercises.length === 1 && !importedRoutine}
                             >
                               <Trash2 className="w-4 h-4" />
                               <span className="sr-only">Eliminar segundo ejercicio</span>
@@ -837,6 +886,7 @@ export function PlanForm({
         Agregar dia
       </Button>
 
+      {importedRoutine ? <p className="text-sm text-muted-foreground">Al crear la rutina aceptás los ejercicios seleccionados y sus valores. La rutina quedará activa desde hoy y el plan activo anterior se archivará.</p> : null}
       <Button type="button" size="lg" onClick={handleSubmit} disabled={!canSave}>
         {saving ? submittingLabel : submitLabel}
       </Button>
