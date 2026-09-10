@@ -14,6 +14,7 @@ import type {
   WorkoutSetInputDTO,
 } from "@my-progress/shared"
 import { supabase } from "@/lib/supabase"
+import { routineImportResultSchema, type RoutineImportResult } from '@my-progress/shared'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
 
@@ -46,7 +47,7 @@ function withSearchParams(path: string, params: Record<string, string | number |
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
-  if (init?.body !== undefined && !headers.has("Content-Type")) {
+  if (init?.body !== undefined && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
   }
 
@@ -79,6 +80,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  importRoutine: async (file: File, onProgress: (percent: number) => void, signal: AbortSignal): Promise<RoutineImportResult> => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('No hay una sesión activa.')
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const abort = () => xhr.abort()
+      const cleanup = () => signal.removeEventListener('abort', abort)
+      xhr.open('POST', `${getApiUrl()}/plans/import`)
+      xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`)
+      xhr.timeout = 95000
+      xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)) }
+      xhr.upload.onload = () => onProgress(100)
+      xhr.onload = () => {
+        cleanup()
+        try {
+          const payload: unknown = JSON.parse(xhr.responseText)
+          if (xhr.status < 200 || xhr.status >= 300) {
+            const message = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : 'No se pudo importar la rutina.'
+            reject(new Error(message)); return
+          }
+          resolve(routineImportResultSchema.parse(payload))
+        } catch { reject(new Error('La respuesta de importación es inválida. Intentá nuevamente.')) }
+      }
+      xhr.onerror = () => { cleanup(); reject(new Error('No se pudo conectar con el servidor. Revisá tu conexión.')) }
+      xhr.ontimeout = () => { cleanup(); reject(new Error('La importación tardó demasiado. Intentá nuevamente.')) }
+      xhr.onabort = () => { cleanup(); reject(new Error('Importación cancelada.')) }
+      if (signal.aborted) { reject(new Error('Importación cancelada.')); return }
+      signal.addEventListener('abort', abort, { once: true })
+      const body = new FormData()
+      body.append('file', file)
+      xhr.send(body)
+    })
+  },
   getProfile: () => request<UserProfileDTO>("/profile"),
   updateProfile: (input: UpdateUserProfileInputDTO) =>
     request<UserProfileDTO>("/profile", { method: "PUT", body: JSON.stringify(input) }),
