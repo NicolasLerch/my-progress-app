@@ -1,4 +1,5 @@
 import prismaClientPkg from "@prisma/client"
+import { RoutineImportError } from '../services/routine-import/errors.js'
 import type { Prisma as PrismaNamespace, PrismaClient as PrismaClientType } from "@prisma/client"
 import {
   buildProgressSeries,
@@ -291,6 +292,9 @@ export class PrismaRepository {
     await this.ensureUser({ id: userId })
 
     const plan = await this.prisma.$transaction(async (tx) => {
+      const exerciseIds = [...new Set(parsed.days.flatMap(day => day.exercises.map(exercise => exercise.exerciseId)))]
+      const count = await tx.exercise.count({ where: { id: { in: exerciseIds } } })
+      if (count !== exerciseIds.length) throw new RoutineImportError('INVALID_EXERCISE', 'Uno de los ejercicios ya no está disponible. Volvé a seleccionarlo del catálogo.', 400)
       if (parsed.status === "active") {
         await tx.plan.updateMany({
           where: { userId, status: "active" },
