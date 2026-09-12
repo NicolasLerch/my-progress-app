@@ -1,5 +1,13 @@
 import { z } from "zod"
 
+export const exerciseTypeSchema = z.enum(["STRENGTH", "CARDIO"])
+export const positiveMinutesSchema = z.number().int().positive().max(2147483647)
+export const cardioResultInputSchema = z.object({
+  durationMinutes: positiveMinutesSchema,
+  distanceMeters: z.number().int().nonnegative().max(2147483647).nullish(),
+  inclinePercent: z.number().finite().nonnegative().nullish(),
+}).strict()
+
 export const planStatusSchema = z.enum(["draft", "active", "archived", "completed"])
 export const workoutSessionStatusSchema = z.enum(["in_progress", "completed", "abandoned"])
 const targetRepsSchema = z.string().trim().min(1).max(30)
@@ -9,9 +17,13 @@ const planExerciseInputSchema = z.object({
   order: z.number().int().positive(),
   exerciseId: z.string().min(1),
   exerciseName: z.string().min(2),
-  targetSets: z.number().int().positive(),
-  targetReps: targetRepsSchema,
-  restSeconds: z.number().int().nonnegative(),
+  type: exerciseTypeSchema.default("STRENGTH"),
+  targetSets: z.number().int().positive().max(2147483647).nullish(),
+  targetReps: targetRepsSchema.nullish(),
+  restSeconds: z.number().int().nonnegative().max(2147483647).nullish(),
+  targetDurationMinutes: positiveMinutesSchema.nullish(),
+  targetDistanceMeters: z.number().int().nonnegative().max(2147483647).nullish(),
+  targetInclinePercent: z.number().finite().nonnegative().nullish(),
   supersetGroupId: supersetGroupIdSchema,
   notes: z.string().max(300).optional(),
 })
@@ -22,6 +34,20 @@ function validatePlanExercises(
 ) {
   const orders = new Set<number>()
   exercises.forEach((exercise, index) => {
+    const invalidFields = exercise.type === "CARDIO"
+      ? [
+          ...(!exercise.targetDurationMinutes ? ["targetDurationMinutes"] : []),
+          ...(["targetSets", "targetReps", "restSeconds", "supersetGroupId"] as const).filter((key) => exercise[key] != null),
+        ]
+      : [
+          ...(["targetSets", "targetReps", "restSeconds"] as const).filter((key) => exercise[key] == null),
+          ...(["targetDurationMinutes", "targetDistanceMeters", "targetInclinePercent"] as const).filter((key) => exercise[key] != null),
+        ]
+    invalidFields.forEach((field) => context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "El objetivo no corresponde al tipo de ejercicio o falta completarlo.",
+      path: [index, field],
+    }))
     if (orders.has(exercise.order)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

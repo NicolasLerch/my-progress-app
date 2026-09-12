@@ -63,6 +63,10 @@ export default function EditPlanPage() {
               id: sourceDay?.exercises[exerciseIndex]?.id ?? `plan-exercise-${crypto.randomUUID()}`,
               planDayId: dayId,
               ...exercise,
+              type: exercise.type ?? "STRENGTH",
+              targetSets: exercise.targetSets ?? null,
+              targetReps: exercise.targetReps ?? null,
+              restSeconds: exercise.restSeconds ?? null,
             })),
           }
         })

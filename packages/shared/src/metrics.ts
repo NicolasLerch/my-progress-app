@@ -24,6 +24,7 @@ type IndexedProgressPoint = ProgressPointDTO & { timestamp: number; sequence: nu
 
 export function calculateSessionVolume(session: WorkoutSessionDTO): number {
   return session.exercises.reduce((sessionTotal, exercise) => {
+    if (exercise.type === "CARDIO") return sessionTotal
     const exerciseVolume = exercise.sets.reduce((total, set) => total + set.weight * set.reps, 0)
     return sessionTotal + exerciseVolume
   }, 0)
@@ -33,7 +34,7 @@ export function buildProgressSeries(
   exercise: ExerciseDTO,
   sessions: WorkoutSessionDTO[],
 ): ProgressSeriesDTO {
-  const points = buildProgressPoints(exercise.id, sessions)
+  const points = exercise.type === "CARDIO" ? [] : buildProgressPoints(exercise.id, sessions)
   const stats = buildLegacyStats(points)
 
   return {
@@ -51,7 +52,7 @@ function buildProgressPoints(exerciseId: string, sessions: WorkoutSessionDTO[]):
       if (!Number.isFinite(timestamp)) return []
 
       return session.exercises
-        .filter((item) => item.exerciseId === exerciseId)
+        .filter((item) => item.exerciseId === exerciseId && item.type !== "CARDIO")
         .flatMap((item) => {
           // A session is valid when it includes at least one completed repetition.
           const completedSets = item.sets.filter((set) => isPositiveFiniteNumber(set.reps))
