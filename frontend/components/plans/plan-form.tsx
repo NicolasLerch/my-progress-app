@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, Link2, Plus, Trash2, Unlink } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Link2, Plus, Trash2, Unlink } from 'lucide-react'
 import type { CreatePlanInputDTO, ExerciseDTO, PlanDTO } from '@my-progress/shared'
 import { createPlanInputSchema, importedExerciseNotes, importedExerciseReps, type RoutineImportResult } from '@my-progress/shared'
 import { api } from '@/lib/api'
@@ -11,6 +11,7 @@ import { ExerciseSearchSelect } from '@/components/exercise-search-select'
 import { AppLoadingIndicator } from '@/components/app-loading-indicator'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,6 +21,10 @@ type ExerciseForm = {
   exerciseId: string
   exerciseName: string
   muscleGroup: string
+  type: ExerciseDTO["type"]
+  targetDurationMinutes: string
+  targetDistanceMeters: string
+  targetInclinePercent: string
   targetSets: string
   targetReps: string
   restSeconds: string
@@ -75,7 +80,7 @@ function mapImportToForm(result: RoutineImportResult): PlanFormValues {
       id: day.id, name: day.name?.trim() || `Día ${index + 1}`,
       exercises: day.exercises.map(source => {
         const selected = source.match.status !== 'unresolved' ? source.match.exercise : null
-        return { id: source.id, exerciseId: selected?.id ?? '', exerciseName: selected?.name ?? '', muscleGroup: selected?.muscleGroup ?? '', targetSets: source.sets === null ? '' : String(source.sets), targetReps: importedExerciseReps(source), restSeconds: source.restSeconds === null ? '' : String(source.restSeconds), notes: importedExerciseNotes(source), supersetGroupId: source.supersetGroupId ?? undefined, imported: source }
+        return { id: source.id, exerciseId: selected?.id ?? '', exerciseName: selected?.name ?? '', muscleGroup: selected?.muscleGroup ?? '', type: selected?.type ?? 'STRENGTH', targetDurationMinutes: '', targetDistanceMeters: '', targetInclinePercent: '', targetSets: source.sets === null ? '' : String(source.sets), targetReps: importedExerciseReps(source), restSeconds: source.restSeconds === null ? '' : String(source.restSeconds), notes: importedExerciseNotes(source), supersetGroupId: source.supersetGroupId ?? undefined, imported: source }
       }),
     })),
   }
@@ -85,12 +90,14 @@ function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function createExerciseForm(defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 'muscleGroup'>): ExerciseForm {
+function createExerciseForm(defaultExercise?: ExerciseDTO): ExerciseForm {
   return {
     id: createId('exercise'),
     exerciseId: defaultExercise?.id ?? '',
     exerciseName: defaultExercise?.name ?? '',
     muscleGroup: defaultExercise?.muscleGroup ?? '',
+    type: defaultExercise?.type ?? 'STRENGTH',
+    targetDurationMinutes: '', targetDistanceMeters: '', targetInclinePercent: '',
     targetSets: '4',
     targetReps: '8',
     restSeconds: '90',
@@ -99,7 +106,7 @@ function createExerciseForm(defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 
   }
 }
 
-function createDayForm(index: number, defaultExercise?: Pick<ExerciseDTO, 'id' | 'name' | 'muscleGroup'>): DayForm {
+function createDayForm(index: number, defaultExercise?: ExerciseDTO): DayForm {
   return {
     id: createId('day'),
     name: `Dia ${index + 1}`,
@@ -133,6 +140,7 @@ function PlanExerciseFields({
                   id: exercise.exerciseId,
                   name: exercise.exerciseName,
                   muscleGroup: exercise.muscleGroup,
+                  type: exercise.type,
                 }
               : undefined
           }
@@ -142,13 +150,39 @@ function PlanExerciseFields({
               ...currentExercise,
               exerciseId: selectedExercise.id,
               exerciseName: selectedExercise.name,
-                muscleGroup: selectedExercise.muscleGroup,
+              muscleGroup: selectedExercise.muscleGroup,
+              type: selectedExercise.type,
             }))
           }
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      {exercise.type === 'CARDIO' ? (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`duration-${exercise.id}`}>Duración (minutos)</Label>
+          <Input id={`duration-${exercise.id}`} type="number" inputMode="numeric" min="1" max="2147483647" step="1" required
+            value={exercise.targetDurationMinutes}
+            onChange={event => updateExercise(dayId, exercise.id, current => ({ ...current, targetDurationMinutes: event.target.value }))}
+            className={planInputClassName} />
+          <p className="mt-1 text-xs text-muted-foreground">También podés indicar distancia y/o inclinación objetivo.</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`distance-${exercise.id}`}>Distancia en metros (opcional)</Label>
+              <Input id={`distance-${exercise.id}`} type="number" inputMode="numeric" min="0" max="2147483647" step="1"
+                value={exercise.targetDistanceMeters} placeholder="Sin objetivo"
+                onChange={event => updateExercise(dayId, exercise.id, current => ({ ...current, targetDistanceMeters: event.target.value }))}
+                className={planInputClassName} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`incline-${exercise.id}`}>Inclinación (opcional)</Label>
+              <Input id={`incline-${exercise.id}`} type="number" inputMode="decimal" min="0" step="any"
+                value={exercise.targetInclinePercent} placeholder="Sin objetivo"
+                onChange={event => updateExercise(dayId, exercise.id, current => ({ ...current, targetInclinePercent: event.target.value }))}
+                className={planInputClassName} />
+            </div>
+          </div>
+        </div>
+      ) : <div className="grid grid-cols-3 gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor={`sets-${exercise.id}`}>{sharedValues ? 'Series compartidas' : 'Series'}</Label>
           <Input
@@ -199,7 +233,7 @@ function PlanExerciseFields({
             disabled={sharedValues}
           />
         </div>
-      </div>
+      </div>}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor={`notes-${exercise.id}`}>Notas opcionales</Label>
@@ -230,9 +264,13 @@ function mapPlanToForm(plan: PlanDTO): PlanFormValues {
         exerciseId: exercise.exerciseId,
         exerciseName: exercise.exerciseName,
         muscleGroup: '',
-        targetSets: String(exercise.targetSets),
-        targetReps: String(exercise.targetReps),
-        restSeconds: String(exercise.restSeconds),
+        type: exercise.type ?? 'STRENGTH',
+        targetDurationMinutes: exercise.targetDurationMinutes?.toString() ?? '',
+        targetDistanceMeters: exercise.targetDistanceMeters?.toString() ?? '',
+        targetInclinePercent: exercise.targetInclinePercent?.toString() ?? '',
+        targetSets: String(exercise.targetSets ?? 4),
+        targetReps: String(exercise.targetReps ?? '8'),
+        restSeconds: String(exercise.restSeconds ?? 90),
         supersetGroupId: exercise.supersetGroupId,
         notes: exercise.notes ?? '',
       })),
@@ -280,9 +318,13 @@ export function buildPlanInput(
         order: exerciseIndex + 1,
         exerciseId: exercise.exerciseId,
         exerciseName: exercise.exerciseName.trim(),
-        targetSets: parsePositiveInteger(exercise.targetSets) ?? 0,
-        targetReps: parseTargetReps(exercise.targetReps) ?? '',
-        restSeconds: parseNonNegativeInteger(exercise.restSeconds) ?? 0,
+        type: exercise.type,
+        targetDurationMinutes: exercise.type === 'CARDIO' ? parsePositiveInteger(exercise.targetDurationMinutes) : null,
+        targetDistanceMeters: exercise.type === 'CARDIO' && exercise.targetDistanceMeters.trim() ? Number(exercise.targetDistanceMeters) : null,
+        targetInclinePercent: exercise.type === 'CARDIO' && exercise.targetInclinePercent.trim() ? Number(exercise.targetInclinePercent) : null,
+        targetSets: exercise.type === 'CARDIO' ? null : parsePositiveInteger(exercise.targetSets) ?? 0,
+        targetReps: exercise.type === 'CARDIO' ? null : parseTargetReps(exercise.targetReps) ?? '',
+        restSeconds: exercise.type === 'CARDIO' ? null : parseNonNegativeInteger(exercise.restSeconds) ?? 0,
         supersetGroupId: exercise.supersetGroupId,
         notes: exercise.notes.trim() || undefined,
       })),
@@ -345,6 +387,19 @@ export function PlanForm({
           errors.push(`Falta seleccionar el ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1}.`)
         }
 
+        if (exercise.type === 'CARDIO') {
+          const duration = parsePositiveInteger(exercise.targetDurationMinutes)
+          if (duration === null || duration > 2147483647) errors.push('Completá una duración objetivo válida para cardio.')
+          if (exercise.targetDistanceMeters.trim()) {
+            const distance = Number(exercise.targetDistanceMeters)
+            if (!Number.isInteger(distance) || distance < 0 || distance > 2147483647) errors.push('La distancia objetivo debe ser un entero no negativo válido.')
+          }
+          if (exercise.targetInclinePercent.trim()) {
+            const incline = Number(exercise.targetInclinePercent)
+            if (!Number.isFinite(incline) || incline < 0) errors.push('La inclinación objetivo debe ser un número no negativo válido.')
+          }
+          return
+        }
         if (parsePositiveInteger(exercise.targetSets) === null) {
           errors.push(`Las series del ejercicio ${exerciseIndex + 1} del dia ${dayIndex + 1} deben ser mayores a 0.`)
         }
@@ -460,6 +515,8 @@ export function PlanForm({
       if (!currentExercise) return day
 
       const nextExercise = updater(currentExercise)
+      const removedGroup = nextExercise.type === 'CARDIO' ? currentExercise.supersetGroupId : undefined
+      if (nextExercise.type === 'CARDIO') nextExercise.supersetGroupId = undefined
       const syncSupersetValues = Boolean(nextExercise.supersetGroupId) && (
         nextExercise.targetSets !== currentExercise.targetSets || nextExercise.restSeconds !== currentExercise.restSeconds
       )
@@ -468,6 +525,7 @@ export function PlanForm({
         ...day,
         exercises: day.exercises.map((exercise) => {
           if (exercise.id === exerciseId) return nextExercise
+          if (removedGroup && exercise.supersetGroupId === removedGroup) return { ...exercise, supersetGroupId: undefined }
           if (syncSupersetValues && exercise.supersetGroupId === nextExercise.supersetGroupId) {
             return {
               ...exercise,
@@ -590,8 +648,27 @@ export function PlanForm({
 
       <div className="flex flex-col gap-4">
         {days.map((day, dayIndex) => (
-          <Card key={day.id}>
-            <CardContent className="p-4 flex flex-col gap-4">
+          <Collapsible key={day.id} defaultOpen={false} asChild>
+          <Card className="gap-0 py-0">
+            <h2>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-primary">Día {dayIndex + 1}</span>
+                    <span className="block break-words font-semibold">{day.name.trim() || 'Sin nombre'}</span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {day.exercises.length} {day.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                    </span>
+                  </span>
+                  <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+                </button>
+              </CollapsibleTrigger>
+            </h2>
+            <CollapsibleContent>
+            <CardContent className="border-t p-4 flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -667,7 +744,7 @@ export function PlanForm({
                       ).indexOf(exercise.supersetGroupId)
                     : -1
                   const supersetLabel = String.fromCharCode(65 + supersetGroupIndex)
-                  const canGroupWithNext = !isSuperset
+                  const canGroupWithNext = !isSuperset && exercise.type !== 'CARDIO'
 
                   return (
                   <div
@@ -741,99 +818,7 @@ export function PlanForm({
                     </div>
 
                     <div className="flex flex-col gap-3">
-                      <ImportReview exercise={exercise} />
-                      <div className="flex flex-col gap-2">
-                        <Label>Ejercicio</Label>
-                        <ExerciseSearchSelect
-                          value={exercise.exerciseId}
-                          selectedExercise={
-                            exercise.exerciseId
-                              ? {
-                                  id: exercise.exerciseId,
-                                  name: exercise.exerciseName,
-                                  muscleGroup: exercise.muscleGroup,
-                                }
-                              : undefined
-                          }
-                          searchExercises={(query) => api.getExercises(query, 20)}
-                          onSelect={(selectedExercise) =>
-                            updateExercise(day.id, exercise.id, (currentExercise) => ({
-                              ...currentExercise,
-                              exerciseId: selectedExercise.id,
-                              exerciseName: selectedExercise.name,
-                              muscleGroup: selectedExercise.muscleGroup,
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor={`sets-${exercise.id}`}>{isSupersetSecond ? 'Series compartidas' : 'Series'}</Label>
-                          <Input
-                            id={`sets-${exercise.id}`}
-                            type="number"
-                            min="1"
-                            value={exercise.targetSets}
-                            onChange={(event) =>
-                              updateExercise(day.id, exercise.id, (currentExercise) => ({
-                                ...currentExercise,
-                                targetSets: event.target.value,
-                              }))
-                            }
-                            className={planInputClassName}
-                            disabled={isSupersetSecond}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor={`reps-${exercise.id}`}>Reps</Label>
-                          <Input
-                            id={`reps-${exercise.id}`}
-                            type="text"
-                            value={exercise.targetReps}
-                            onChange={(event) =>
-                              updateExercise(day.id, exercise.id, (currentExercise) => ({
-                                ...currentExercise,
-                                targetReps: event.target.value,
-                              }))
-                            }
-                            placeholder="8 a 12"
-                            className={planInputClassName}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor={`rest-${exercise.id}`}>{isSupersetSecond ? 'Descanso compartido' : 'Descanso'}</Label>
-                          <Input
-                            id={`rest-${exercise.id}`}
-                            type="number"
-                            min="0"
-                            value={exercise.restSeconds}
-                            onChange={(event) =>
-                              updateExercise(day.id, exercise.id, (currentExercise) => ({
-                                ...currentExercise,
-                                restSeconds: event.target.value,
-                              }))
-                            }
-                            className={planInputClassName}
-                            disabled={isSupersetSecond}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <Label htmlFor={`notes-${exercise.id}`}>Notas opcionales</Label>
-                        <Textarea
-                          id={`notes-${exercise.id}`}
-                          value={exercise.notes}
-                          onChange={(event) =>
-                            updateExercise(day.id, exercise.id, (currentExercise) => ({
-                              ...currentExercise,
-                              notes: event.target.value,
-                            }))
-                          }
-                          placeholder="Ej: mantener tecnica controlada o usar pausa al final."
-                        />
-                      </div>
+                      <PlanExerciseFields dayId={day.id} exercise={exercise} sharedValues={false} planInputClassName={planInputClassName} updateExercise={updateExercise} />
                       {isSuperset && supersetPartner ? (
                         <div className="rounded-xl border border-primary/25 bg-background/50 p-3">
                           <div className="mb-3 flex items-center justify-between gap-3">
@@ -877,7 +862,9 @@ export function PlanForm({
                 Agregar ejercicio
               </Button>
             </CardContent>
+            </CollapsibleContent>
           </Card>
+          </Collapsible>
         ))}
       </div>
 

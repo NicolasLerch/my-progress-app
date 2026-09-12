@@ -1,3 +1,5 @@
+export type ExerciseType = "STRENGTH" | "CARDIO"
+
 export type PlanStatus = "draft" | "active" | "archived" | "completed"
 export type WorkoutSessionStatus = "in_progress" | "completed" | "abandoned"
 
@@ -23,6 +25,7 @@ export interface UpdateUserProfileInputDTO {
 }
 
 export interface ExerciseDTO {
+  type: ExerciseType
   id: string
   name: string
   muscleGroup: string
@@ -34,9 +37,13 @@ export interface PlanExerciseDTO {
   order: number
   exerciseId: string
   exerciseName: string
-  targetSets: number
-  targetReps: string
-  restSeconds: number
+  type: ExerciseType
+  targetSets: number | null
+  targetReps: string | null
+  restSeconds: number | null
+  targetDurationMinutes?: number | null
+  targetDistanceMeters?: number | null
+  targetInclinePercent?: number | null
   supersetGroupId?: string
   notes?: string
 }
@@ -85,11 +92,16 @@ export interface WorkoutExerciseDTO {
   replacesPlanExerciseId?: string
   replacementReason?: string
   isReplacement: boolean
-  targetSets: number
-  targetReps: string
-  restSeconds: number
+  type: ExerciseType
+  targetSets: number | null
+  targetReps: string | null
+  restSeconds: number | null
+  targetDurationMinutes?: number | null
+  targetDistanceMeters?: number | null
+  targetInclinePercent?: number | null
   supersetGroupId?: string
   notes?: string
+  cardioResult?: CardioResultDTO | null
   sets: WorkoutSetDTO[]
 }
 
@@ -241,11 +253,26 @@ export interface CreatePlanInputDTO {
       order: number
       exerciseId: string
       exerciseName: string
-      targetSets: number
-      targetReps: string
-      restSeconds: number
+      type?: ExerciseType
+      targetSets?: number | null
+      targetReps?: string | null
+      restSeconds?: number | null
+      targetDurationMinutes?: number | null
+      targetDistanceMeters?: number | null
+      targetInclinePercent?: number | null
       supersetGroupId?: string
       notes?: string
     }>
   }>
+}
+
+export interface CardioResultInputDTO {
+  durationMinutes: number
+  distanceMeters?: number | null
+  inclinePercent?: number | null
+}
+
+export interface CardioResultDTO extends CardioResultInputDTO {
+  id: string
+  workoutExerciseId: string
 }

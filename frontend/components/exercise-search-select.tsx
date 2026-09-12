@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 
 type ExerciseSearchSelectProps = {
   value: string
-  selectedExercise?: Pick<ExerciseDTO, 'id' | 'name' | 'muscleGroup'>
+  selectedExercise?: ExerciseDTO
   onSelect: (exercise: ExerciseDTO) => void
   searchExercises: (query: string) => Promise<ExerciseDTO[]>
   placeholder?: string
