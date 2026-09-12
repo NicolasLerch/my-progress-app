@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import {
   createPlanInputSchema,
+  cardioResultInputSchema,
   createWorkoutExerciseInputSchema,
   createWorkoutSessionInputSchema,
   replaceWorkoutExerciseInputSchema,
@@ -25,8 +26,15 @@ const exerciseSearchQuerySchema = z.object({
 export async function registerRoutes(app: FastifyInstance) {
   const repository = new PrismaRepository(prisma)
 
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof z.ZodError) return reply.code(400).send({ message: "Revisa los datos ingresados.", issues: error.issues })
+    request.log.error(error)
+    const status = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500
+    return reply.code(status).send({ message: status < 500 && error instanceof Error ? error.message : "No se pudo completar la operacion." })
+  })
+
   app.addHook("preHandler", requireUser)
-  await registerRoutineImport(app, new FileImportService(() => prisma.exercise.findMany({ select: { id: true, name: true, muscleGroup: true } })))
+  await registerRoutineImport(app, new FileImportService(() => prisma.exercise.findMany({ select: { id: true, name: true, muscleGroup: true, type: true } })))
 
   app.get("/health", async () => ({ ok: true }))
 
@@ -55,6 +63,7 @@ export async function registerRoutes(app: FastifyInstance) {
       const plan = await repository.createPlan(request.user.id, parsed.data)
       return reply.code(201).send(plan)
     } catch (error: unknown) {
+      if (error instanceof z.ZodError || (error instanceof Error && "statusCode" in error && error.statusCode === 400)) throw error
       if (error instanceof RoutineImportError) return reply.code(error.statusCode).send({ code: error.code, message: error.message })
       request.log.error({ code: 'PLAN_CREATE_FAILED' }, 'Plan creation failed')
       return reply.code(500).send({ code: 'PLAN_CREATE_FAILED', message: 'No se pudo crear el plan. Revisá los ejercicios e intentá nuevamente.' })
@@ -102,9 +111,13 @@ export async function registerRoutes(app: FastifyInstance) {
                   order: exercise.order,
                   exerciseId: exercise.exerciseId,
                   exerciseName: exercise.exerciseName,
-                  targetSets: exercise.targetSets,
-                  targetReps: exercise.targetReps,
-                  restSeconds: exercise.restSeconds,
+                  type: exercise.type,
+                  targetDurationMinutes: exercise.targetDurationMinutes,
+                  targetDistanceMeters: exercise.targetDistanceMeters,
+                  targetInclinePercent: exercise.targetInclinePercent,
+                  targetSets: exercise.targetSets ?? null,
+                  targetReps: exercise.targetReps ?? null,
+                  restSeconds: exercise.restSeconds ?? null,
                   supersetGroupId: exercise.supersetGroupId,
                   notes: exercise.notes,
                 }))
@@ -148,6 +161,14 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!session) {
       return reply.code(404).send({ message: "Session not found." })
     }
+    return session
+  })
+
+  app.put("/workout-sessions/:id/exercises/:workoutExerciseId/cardio-result", async (request, reply) => {
+    const params = request.params as { id: string; workoutExerciseId: string }
+    const input = cardioResultInputSchema.parse(request.body)
+    const session = await repository.upsertCardioResult(request.user.id, params.id, params.workoutExerciseId, input)
+    if (!session) return reply.code(404).send({ message: "Session or exercise not found." })
     return session
   })
 

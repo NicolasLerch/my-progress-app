@@ -3,6 +3,10 @@ import { RoutineImportError } from '../services/routine-import/errors.js'
 import type { Prisma as PrismaNamespace, PrismaClient as PrismaClientType } from "@prisma/client"
 import {
   buildProgressSeries,
+  cardioResultInputSchema,
+  updatePlanDayInputSchema,
+  type CardioResultInputDTO,
+  type ExerciseType,
   calculateSessionVolume,
   createPlanInputSchema,
   demoUser,
@@ -43,6 +47,8 @@ const workoutSessionInclude = {
   exercises: {
     orderBy: [{ position: "asc" }, { id: "asc" }],
     include: {
+      exercise: true,
+      cardioResult: true,
       sets: {
         orderBy: { setNumber: "asc" },
       },
@@ -106,9 +112,13 @@ function mapPlanExercise(exercise: PlanWithRelations["days"][number]["exercises"
     order: exercise.order,
     exerciseId: exercise.exerciseId,
     exerciseName: exercise.exercise.name,
-    targetSets: exercise.targetSets,
-    targetReps: exercise.targetReps,
-    restSeconds: exercise.restSeconds,
+    type: exercise.exercise.type,
+    targetSets: exercise.targetSets ?? null,
+    targetReps: exercise.targetReps ?? null,
+    restSeconds: exercise.restSeconds ?? null,
+    targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+    targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+    targetInclinePercent: exercise.targetInclinePercent ?? null,
     supersetGroupId: exercise.supersetGroupId ?? undefined,
     notes: exercise.notes ?? undefined,
   }
@@ -156,13 +166,18 @@ function mapWorkoutSession(session: WorkoutSessionWithRelations): WorkoutSession
       position: exercise.position,
       exerciseId: exercise.exerciseId,
       exerciseName: exercise.exerciseName,
+      type: exercise.exercise.type,
+      cardioResult: exercise.cardioResult,
       planExerciseId: exercise.planExerciseId ?? undefined,
       replacesPlanExerciseId: exercise.replacesPlanExerciseId ?? undefined,
       replacementReason: exercise.replacementReason ?? undefined,
       isReplacement: exercise.isReplacement,
-      targetSets: exercise.targetSets,
-      targetReps: exercise.targetReps,
-      restSeconds: exercise.restSeconds,
+      targetSets: exercise.targetSets ?? null,
+      targetReps: exercise.targetReps ?? null,
+      restSeconds: exercise.restSeconds ?? null,
+      targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+      targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+      targetInclinePercent: exercise.targetInclinePercent ?? null,
       supersetGroupId: exercise.supersetGroupId ?? undefined,
       notes: exercise.notes ?? undefined,
       sets: exercise.sets.map((set) => ({
@@ -185,6 +200,7 @@ function minutesBetween(startedAt: Date, completedAt: Date) {
 }
 
 type ExerciseSearchRow = {
+  type: ExerciseType
   id: string
   name: string
   muscleGroup: string
@@ -199,11 +215,54 @@ function mapExercise(exercise: ExerciseSearchRow): ExerciseDTO {
     id: exercise.id,
     name: exercise.name,
     muscleGroup: exercise.muscleGroup,
+    type: exercise.type,
   }
 }
 
 export class PrismaRepository {
   constructor(private readonly prisma: PrismaClientType) {}
+
+  private async validatePlanExercises(
+    tx: PrismaNamespace.TransactionClient,
+    exercises: CreatePlanInputDTO["days"][number]["exercises"],
+  ) {
+    const catalog = await tx.exercise.findMany({ where: { id: { in: exercises.map((item) => item.exerciseId) } } })
+    for (const item of exercises) {
+      const exercise = catalog.find((entry) => entry.id === item.exerciseId)
+      if (!exercise || exercise.type !== (item.type ?? "STRENGTH")) {
+        throw Object.assign(new Error("El ejercicio o su tipo no coincide con el catalogo."), { statusCode: 400 })
+      }
+    }
+    updatePlanDayInputSchema.parse({ exercises })
+  }
+
+  async upsertCardioResult(
+    userId: string,
+    sessionId: string,
+    workoutExerciseId: string,
+    input: CardioResultInputDTO,
+  ): Promise<WorkoutSessionDTO | null> {
+    const payload = cardioResultInputSchema.parse(input)
+    const exercise = await this.prisma.workoutExercise.findFirst({
+      where: { id: workoutExerciseId, workoutSessionId: sessionId, workoutSession: { userId } },
+      include: { exercise: true },
+    })
+    if (!exercise) return null
+    if (exercise.exercise.type !== "CARDIO") {
+      throw Object.assign(new Error("Los ejercicios de fuerza no admiten resultados cardio."), { statusCode: 400 })
+    }
+    const data = {
+      durationMinutes: payload.durationMinutes,
+      distanceMeters: payload.distanceMeters ?? null,
+      inclinePercent: payload.inclinePercent ?? null,
+    }
+    await this.prisma.cardioResult.upsert({
+      where: { workoutExerciseId },
+      create: { workoutExerciseId, ...data },
+      update: data,
+    })
+    return this.getWorkoutSession(userId, sessionId)
+  }
 
   private assertConsecutiveOrders(items: Array<{ order: number }>, scope: string) {
     const orders = [...items.map((item) => item.order)].sort((left, right) => left - right)
@@ -215,7 +274,7 @@ export class PrismaRepository {
   }
 
   private assertSupersetGroups(
-    exercises: Array<{ order: number; targetSets: number; restSeconds: number; supersetGroupId?: string }>,
+    exercises: Array<{ order: number; targetSets?: number | null; restSeconds?: number | null; supersetGroupId?: string }>,
     scope: string,
   ) {
     const groups = new Map<string, typeof exercises>()
@@ -248,7 +307,7 @@ export class PrismaRepository {
     const query = normalizeExerciseSearchQuery(options.query)
     const limit = options.limit ?? 20
     const exercises = await this.prisma.$queryRaw<ExerciseSearchRow[]>(Prisma.sql`
-      SELECT "id", "name", "muscleGroup"
+      SELECT "id", "name", "muscleGroup", "type"
       FROM "Exercise"
       WHERE (
         ${query} = ''
@@ -293,8 +352,9 @@ export class PrismaRepository {
 
     const plan = await this.prisma.$transaction(async (tx) => {
       const exerciseIds = [...new Set(parsed.days.flatMap(day => day.exercises.map(exercise => exercise.exerciseId)))]
-      const count = await tx.exercise.count({ where: { id: { in: exerciseIds } } })
-      if (count !== exerciseIds.length) throw new RoutineImportError('INVALID_EXERCISE', 'Uno de los ejercicios ya no está disponible. Volvé a seleccionarlo del catálogo.', 400)
+      const catalog = await tx.exercise.findMany({ where: { id: { in: exerciseIds } } })
+      if (catalog.length !== exerciseIds.length) throw new RoutineImportError('INVALID_EXERCISE', 'Uno de los ejercicios ya no está disponible. Volvé a seleccionarlo del catálogo.', 400)
+      for (const day of parsed.days) await this.validatePlanExercises(tx, day.exercises)
       if (parsed.status === "active") {
         await tx.plan.updateMany({
           where: { userId, status: "active" },
@@ -321,10 +381,13 @@ export class PrismaRepository {
                   create: day.exercises.map((exercise) => ({
                     order: exercise.order,
                     exerciseId: exercise.exerciseId,
-                    targetSets: exercise.targetSets,
-                    targetReps: exercise.targetReps,
-                    restSeconds: exercise.restSeconds,
-                    supersetGroupId: exercise.supersetGroupId,
+                    targetSets: exercise.targetSets ?? null,
+                    targetReps: exercise.targetReps ?? null,
+                    restSeconds: exercise.restSeconds ?? null,
+                    targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+                    targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+                    targetInclinePercent: exercise.targetInclinePercent ?? null,
+                    supersetGroupId: exercise.supersetGroupId ?? null,
                     notes: exercise.notes,
                   })),
                 },
@@ -415,6 +478,7 @@ export class PrismaRepository {
         })
 
         for (const day of partial.days) {
+          await this.validatePlanExercises(tx, day.exercises)
           if (existingDayIds.has(day.id)) {
             await tx.planDay.update({
               where: { id: day.id },
@@ -465,10 +529,13 @@ export class PrismaRepository {
                 data: {
                   order: exercise.order,
                   exerciseId: exercise.exerciseId,
-                  targetSets: exercise.targetSets,
-                  targetReps: exercise.targetReps,
-                  restSeconds: exercise.restSeconds,
-                  supersetGroupId: exercise.supersetGroupId,
+                  targetSets: exercise.targetSets ?? null,
+                  targetReps: exercise.targetReps ?? null,
+                  restSeconds: exercise.restSeconds ?? null,
+                  targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+                  targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+                  targetInclinePercent: exercise.targetInclinePercent ?? null,
+                  supersetGroupId: exercise.supersetGroupId ?? null,
                   notes: exercise.notes,
                 },
               })
@@ -479,10 +546,13 @@ export class PrismaRepository {
                   planDayId: day.id,
                   order: exercise.order,
                   exerciseId: exercise.exerciseId,
-                  targetSets: exercise.targetSets,
-                  targetReps: exercise.targetReps,
-                  restSeconds: exercise.restSeconds,
-                  supersetGroupId: exercise.supersetGroupId,
+                  targetSets: exercise.targetSets ?? null,
+                  targetReps: exercise.targetReps ?? null,
+                  restSeconds: exercise.restSeconds ?? null,
+                  targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+                  targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+                  targetInclinePercent: exercise.targetInclinePercent ?? null,
+                  supersetGroupId: exercise.supersetGroupId ?? null,
                   notes: exercise.notes,
                 },
               })
@@ -582,6 +652,7 @@ export class PrismaRepository {
       this.prisma.workoutSet.findMany({
         where: {
           workoutExercise: {
+            exercise: { type: "STRENGTH" },
             workoutSession: {
               userId: user.id,
             },
@@ -718,10 +789,13 @@ export class PrismaRepository {
             exerciseName: exercise.exercise.name,
             planExerciseId: exercise.id,
             isReplacement: false,
-            targetSets: exercise.targetSets,
-            targetReps: exercise.targetReps,
-            restSeconds: exercise.restSeconds,
-            supersetGroupId: exercise.supersetGroupId,
+            targetSets: exercise.targetSets ?? null,
+            targetReps: exercise.targetReps ?? null,
+            restSeconds: exercise.restSeconds ?? null,
+            targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+            targetDistanceMeters: exercise.targetDistanceMeters ?? null,
+            targetInclinePercent: exercise.targetInclinePercent ?? null,
+            supersetGroupId: exercise.supersetGroupId ?? null,
             notes: exercise.notes,
           })),
         },
@@ -748,7 +822,7 @@ export class PrismaRepository {
 
     const exercise = await this.prisma.exercise.findUnique({
       where: { id: exerciseId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, type: true },
     })
 
     if (!exercise) {
@@ -768,9 +842,9 @@ export class PrismaRepository {
         exerciseId,
         exerciseName: exercise.name,
         isReplacement: false,
-        targetSets: 0,
-        targetReps: "",
-        restSeconds: 0,
+        targetSets: exercise.type === "CARDIO" ? null : 0,
+        targetReps: exercise.type === "CARDIO" ? null : "",
+        restSeconds: exercise.type === "CARDIO" ? null : 0,
       },
     })
 
@@ -798,6 +872,8 @@ export class PrismaRepository {
         workoutSessionId: sessionId,
       },
       include: {
+        exercise: true,
+        cardioResult: true,
         sets: {
           select: { id: true },
           take: 1,
@@ -809,17 +885,21 @@ export class PrismaRepository {
       return null
     }
 
-    if (workoutExercise.sets.length > 0) {
-      throw new Error("No se puede cambiar un ejercicio que ya tiene series guardadas.")
+    if (workoutExercise.sets.length > 0 || workoutExercise.cardioResult) {
+      throw new Error("No se puede cambiar un ejercicio que ya tiene resultados guardados.")
     }
 
     const exercise = await this.prisma.exercise.findUnique({
       where: { id: input.exerciseId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, type: true },
     })
 
     if (!exercise) {
       return null
+    }
+
+    if (exercise.type !== workoutExercise.exercise.type) {
+      throw Object.assign(new Error("El reemplazo debe ser del mismo tipo de ejercicio."), { statusCode: 400 })
     }
 
     await this.prisma.workoutExercise.update({
@@ -864,11 +944,15 @@ export class PrismaRepository {
         id: workoutExerciseId,
         workoutSessionId: sessionId,
       },
-      select: { id: true },
+      select: { id: true, exercise: { select: { type: true } } },
     })
 
     if (!workoutExercise) {
       return null
+    }
+
+    if (workoutExercise.exercise.type !== "STRENGTH") {
+      throw Object.assign(new Error("Cardio no admite series de fuerza."), { statusCode: 400 })
     }
 
     await this.prisma.workoutSet.upsert({
@@ -977,9 +1061,9 @@ export class PrismaRepository {
     const query = normalizeExerciseSearchQuery(options.query)
     const limit = options.limit ?? 20
     const exercises = await this.prisma.$queryRaw<ExerciseSearchRow[]>(Prisma.sql`
-      SELECT exercise."id", exercise."name", exercise."muscleGroup"
+      SELECT exercise."id", exercise."name", exercise."muscleGroup", exercise."type"
       FROM "Exercise" AS exercise
-      WHERE EXISTS (
+      WHERE exercise."type" = 'STRENGTH' AND EXISTS (
         SELECT 1
         FROM "WorkoutExercise" AS workout_exercise
         INNER JOIN "WorkoutSession" AS workout_session
@@ -1006,6 +1090,10 @@ export class PrismaRepository {
 
     if (!exercise) {
       return null
+    }
+
+    if (exercise.type === "CARDIO") {
+      throw Object.assign(new Error("Las estadisticas de fuerza no corresponden a cardio."), { statusCode: 400 })
     }
 
     const rows = await this.prisma.workoutExercise.findMany({
@@ -1049,6 +1137,7 @@ export class PrismaRepository {
           position: row.position,
           exerciseId: row.exerciseId,
           exerciseName: row.exerciseName,
+          type: exercise.type,
           planExerciseId: row.planExerciseId ?? undefined,
           replacesPlanExerciseId: row.replacesPlanExerciseId ?? undefined,
           replacementReason: row.replacementReason ?? undefined,
@@ -1077,6 +1166,7 @@ export class PrismaRepository {
         id: exercise.id,
         name: exercise.name,
         muscleGroup: exercise.muscleGroup,
+        type: exercise.type,
       },
       sessions,
     )

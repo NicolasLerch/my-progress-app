@@ -50,7 +50,18 @@ export default function HistoryDetailPage() {
         <Card key={exercise.id}>
           <CardContent className="p-4 flex flex-col gap-2">
             <h2 className="font-semibold">{exercise.exerciseName}</h2>
-            {exercise.sets.map((set) => (
+            {exercise.type === "CARDIO" ? (
+              <div className="rounded-xl bg-secondary/60 px-3 py-2 text-sm">
+                {exercise.targetDurationMinutes != null && <p className="text-muted-foreground">Objetivo: {exercise.targetDurationMinutes} min</p>}
+                {exercise.targetDistanceMeters != null && <p className="text-muted-foreground">Distancia objetivo: {exercise.targetDistanceMeters} m</p>}
+                {exercise.targetInclinePercent != null && <p className="text-muted-foreground">Inclinación objetivo: {exercise.targetInclinePercent}%</p>}
+                {exercise.cardioResult ? <>
+                  <p>{exercise.cardioResult.durationMinutes} minutos realizados</p>
+                  {exercise.cardioResult.distanceMeters != null && <p>Distancia: {exercise.cardioResult.distanceMeters} m</p>}
+                  {exercise.cardioResult.inclinePercent != null && <p>Inclinación: {exercise.cardioResult.inclinePercent}%</p>}
+                </> : <p>Sin resultado registrado</p>}
+              </div>
+            ) : exercise.sets.map((set) => (
               <div key={set.id} className="rounded-xl bg-secondary/60 px-3 py-2 text-sm">
                 Serie {set.setNumber}: {set.weight}kg x {set.reps}
               </div>

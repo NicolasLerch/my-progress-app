@@ -48,7 +48,7 @@ function getSessionDisplayDayName(session?: WorkoutSessionDTO) {
 
 function getSessionVolume(session: WorkoutSessionDTO) {
   return session.exercises.reduce(
-    (total, exercise) => total + exercise.sets.reduce((subtotal, set) => subtotal + set.weight * set.reps, 0),
+    (total, exercise) => total + (exercise.type === "CARDIO" ? 0 : exercise.sets.reduce((subtotal, set) => subtotal + set.weight * set.reps, 0)),
     0,
   )
 }
@@ -217,7 +217,7 @@ export default function HomePage() {
                             <div className="flex flex-wrap gap-2">
                               {visibleExercises.map((exercise) => (
                                 <span key={exercise.id} className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
-                                  {exercise.exerciseName}
+                                  {exercise.exerciseName}{exercise.type === "CARDIO" && exercise.targetDurationMinutes ? ` · ${exercise.targetDurationMinutes} min` : ""}
                                 </span>
                               ))}
                               {remainingCount > 0 && <span className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">+{remainingCount}</span>}

@@ -21,7 +21,7 @@ export const importedRoutineSchema = z.object({ name: z.string().max(300).nullab
 export const exerciseMatchSchema = z.object({
   status: z.enum(['high', 'medium', 'low', 'unresolved']),
   score: z.number().min(0).max(1),
-  exercise: z.object({ id: z.string(), name: z.string(), muscleGroup: z.string() }).nullable(),
+  exercise: z.object({ type: z.enum(["STRENGTH", "CARDIO"]).default("STRENGTH"), id: z.string(), name: z.string(), muscleGroup: z.string() }).nullable(),
 })
 export const routineImportResultSchema = z.object({
   routine: z.object({ name: z.string().nullable(), days: z.array(z.object({

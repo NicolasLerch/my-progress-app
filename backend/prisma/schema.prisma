@@ -8,6 +8,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum ExerciseType {
+  STRENGTH
+  CARDIO
+}
+
 enum PlanStatus {
   draft
   active
@@ -38,6 +43,7 @@ model Exercise {
   id               String            @id
   name             String
   muscleGroup      String
+  type             ExerciseType      @default(STRENGTH)
   planExercises    PlanExercise[]
   workoutExercises WorkoutExercise[]
 }
@@ -77,9 +83,12 @@ model PlanExercise {
   planDayId   String
   order       Int
   exerciseId  String
-  targetSets  Int
-  targetReps  String
-  restSeconds Int
+  targetSets  Int?
+  targetReps  String?
+  restSeconds Int?
+  targetDurationMinutes Int?
+  targetDistanceMeters Int?
+  targetInclinePercent Float?
   supersetGroupId String?
   notes       String?
   planDay     PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
@@ -119,14 +128,18 @@ model WorkoutExercise {
   replacesPlanExerciseId String?
   replacementReason String?
   isReplacement     Boolean        @default(false)
-  targetSets        Int
-  targetReps        String
-  restSeconds       Int
+  targetSets        Int?
+  targetReps        String?
+  restSeconds       Int?
+  targetDurationMinutes Int?
+  targetDistanceMeters Int?
+  targetInclinePercent Float?
   supersetGroupId   String?
   notes             String?
   workoutSession    WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
   exercise          Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
   sets              WorkoutSet[]
+  cardioResult      CardioResult?
 
   @@index([workoutSessionId, position])
 }
@@ -144,4 +157,13 @@ model WorkoutSet {
   workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
 
   @@unique([workoutExerciseId, setNumber])
+}
+
+model CardioResult {
+  id                String          @id @default(cuid())
+  workoutExerciseId String          @unique
+  durationMinutes   Int
+  distanceMeters    Int?
+  inclinePercent    Float?
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
 }

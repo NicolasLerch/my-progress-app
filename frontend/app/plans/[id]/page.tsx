@@ -138,7 +138,9 @@ export default function PlanDetailPage() {
                     {exercise.exerciseName}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {exercise.targetSets} x {exercise.targetReps} · descanso {exercise.restSeconds}s
+                    {exercise.type === "CARDIO" ? `${exercise.targetDurationMinutes} min objetivo` : `${exercise.targetSets} x ${exercise.targetReps} · descanso ${exercise.restSeconds}s`}
+                    {exercise.type === "CARDIO" && exercise.targetDistanceMeters != null ? ` · ${exercise.targetDistanceMeters} m objetivo` : ""}
+                    {exercise.type === "CARDIO" && exercise.targetInclinePercent != null ? ` · ${exercise.targetInclinePercent}% inclinación objetivo` : ""}
                   </p>
                 </div>
                     ))}

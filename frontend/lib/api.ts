@@ -1,5 +1,6 @@
 import type {
   CreatePlanInputDTO,
+  CardioResultInputDTO,
   CreateWorkoutExerciseInputDTO,
   CreateWorkoutSessionInputDTO,
   ExerciseDTO,
@@ -151,6 +152,10 @@ export const api = {
     request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/exercises/${workoutExerciseId}/sets`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+  upsertCardioResult: (sessionId: string, workoutExerciseId: string, input: CardioResultInputDTO) =>
+    request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/exercises/${workoutExerciseId}/cardio-result`, {
+      method: "PUT", body: JSON.stringify(input),
     }),
   completeWorkoutSession: (sessionId: string) =>
     request<WorkoutSessionDTO>(`/workout-sessions/${sessionId}/complete`, { method: "POST" }),

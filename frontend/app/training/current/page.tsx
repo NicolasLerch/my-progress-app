@@ -5,15 +5,21 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronUp, Clock, History, Pause, Pencil, Play, RefreshCcw } from "lucide-react"
 import type { ExerciseDTO, HomeTodayDTO, WorkoutExerciseDTO, WorkoutSessionDTO, WorkoutSetInputDTO } from "@my-progress/shared"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
+import { cardioResultInputSchema } from "@my-progress/shared"
+import { CardioExerciseCard } from "@/components/cardio-exercise-card"
+import { createWorkoutQueueSync } from "@/lib/workout-sync"
 import { api } from "@/lib/api"
 import {
+  applyPendingWorkoutOperations,
   clearSessionSetOperations,
   deleteSessionSnapshot,
   deleteTrainingDraft,
   getSessionSnapshot,
+  getCurrentSessionSnapshot,
   getTrainingDraft,
   listSetOperations,
   queueSetOperation,
+  queueCardioOperation,
   removeSetOperation,
   saveSessionSnapshot,
   saveTrainingDraft,
@@ -55,6 +61,15 @@ import {
   showRestTimerNotification,
 } from "@/lib/workout-session-notification"
 
+const syncWorkoutQueue = createWorkoutQueueSync({
+  list: listSetOperations,
+  remove: removeSetOperation,
+  isOnline: () => navigator.onLine,
+  send: operation => operation.kind === "cardio"
+    ? api.upsertCardioResult(operation.sessionId, operation.workoutExerciseId, operation.payload)
+    : api.upsertWorkoutSet(operation.sessionId, operation.workoutExerciseId, operation.payload),
+})
+
 type ExerciseUiState = TrainingDraftExerciseState
 type PreviousPerformance = {
   weight: number
@@ -92,7 +107,8 @@ function formatTimerSeconds(totalSeconds: number) {
 }
 
 function getExerciseCompletion(exercise: WorkoutExerciseDTO) {
-  if (exercise.targetSets > 0) {
+  if (exercise.type === "CARDIO") return Boolean(exercise.cardioResult)
+  if (exercise.targetSets != null && exercise.targetSets > 0) {
     return exercise.sets.length >= exercise.targetSets
   }
 
@@ -134,6 +150,9 @@ function buildInitialExerciseUiState(session: WorkoutSessionDTO) {
   return session.exercises.reduce<Record<string, ExerciseUiState>>((accumulator, exercise, index) => {
     accumulator[exercise.id] = {
       expanded: index === 0,
+      durationMinutes: exercise.cardioResult?.durationMinutes.toString() ?? "",
+      distanceMeters: exercise.cardioResult?.distanceMeters?.toString() ?? "",
+      inclinePercent: exercise.cardioResult?.inclinePercent?.toString() ?? "",
       weight: exercise.sets.at(-1)?.weight?.toString() ?? "",
       reps: "",
       editingSetNumber: undefined,
@@ -178,6 +197,7 @@ function mergeWorkoutSessionState(current: WorkoutSessionDTO | null, incoming: W
 
       return {
         ...incomingExercise,
+        cardioResult: currentExercise.cardioResult ?? incomingExercise.cardioResult,
         sets: mergeExerciseSets(currentExercise, incomingExercise),
       }
     }),
@@ -251,16 +271,31 @@ export default function TrainingCurrentPage() {
 
   useEffect(() => {
     if (!isReady) return
+    let cancelled = false
     api.getHome().then(async (payload) => {
+      if (cancelled) return
       setHome(payload)
       setSelectedPlanDayId(payload.todayDay?.id ?? payload.activePlan?.days[0]?.id ?? "")
       const currentSession = payload.currentSession
       if (currentSession) {
         const snapshot = await getSessionSnapshot(currentSession.id)
-        setSession(snapshot ?? currentSession)
+        const operations = await listSetOperations(currentSession.id)
+        const restored = applyPendingWorkoutOperations(mergeWorkoutSessionState(snapshot ?? null, currentSession), operations)
+        if (cancelled) return
+        sessionRef.current = restored
+        setSession(restored)
       }
+    }).catch(async () => {
+      if (!authSession?.user.id) return
+      const snapshot = await getCurrentSessionSnapshot(authSession.user.id)
+      if (!snapshot || cancelled) return
+      const restored = applyPendingWorkoutOperations(snapshot, await listSetOperations(snapshot.id))
+      if (cancelled) return
+      sessionRef.current = restored
+      setSession(restored)
     }).catch(() => {})
-  }, [isReady])
+    return () => { cancelled = true }
+  }, [isReady, authSession?.user.id])
 
   useEffect(() => {
     if (!authSession) {
@@ -296,6 +331,8 @@ export default function TrainingCurrentPage() {
         draft
           ? Object.entries(baseState).reduce<Record<string, ExerciseUiState>>((accumulator, [workoutExerciseId, state]) => {
               accumulator[workoutExerciseId] = {
+                ...state,
+                ...draft.exercises[workoutExerciseId],
                 expanded: draft.exercises[workoutExerciseId]?.expanded ?? state.expanded,
                 weight: draft.exercises[workoutExerciseId]?.weight ?? state.weight,
                 reps: draft.exercises[workoutExerciseId]?.reps ?? state.reps,
@@ -317,7 +354,11 @@ export default function TrainingCurrentPage() {
 
   useEffect(() => {
     if (!session) return
-    void flushQueue(session.id)
+    const sessionId = session.id
+    const retry = () => { void flushQueue(sessionId) }
+    retry()
+    window.addEventListener("online", retry)
+    return () => window.removeEventListener("online", retry)
   }, [session?.id])
 
   useEffect(() => {
@@ -346,16 +387,16 @@ export default function TrainingCurrentPage() {
 
     const expiredTimers = Object.entries(restTimers).flatMap(([workoutExerciseId, timer]) => {
       const exercise = session.exercises.find((item) => item.id === workoutExerciseId)
-      if (!exercise || timer.pausedAt || exercise.restSeconds <= 0) {
+      if (!exercise || timer.pausedAt || (exercise.restSeconds ?? 0) <= 0) {
         return []
       }
 
       const elapsedSeconds = Math.max(0, Math.floor((clockNow - timer.startedAt) / 1000))
-      if (elapsedSeconds < exercise.restSeconds) {
+      if (elapsedSeconds < (exercise.restSeconds ?? 0)) {
         return []
       }
 
-      return [{ exercise, timer, overtimeSeconds: elapsedSeconds - exercise.restSeconds }]
+      return [{ exercise, timer, overtimeSeconds: elapsedSeconds - (exercise.restSeconds ?? 0) }]
     })
 
     const activeTimerKeys = new Set(
@@ -397,7 +438,7 @@ export default function TrainingCurrentPage() {
   )
 
   const totalCompletedSets = useMemo(
-    () => session?.exercises.reduce((count, exercise) => count + exercise.sets.length, 0) ?? 0,
+    () => session?.exercises.reduce((count, exercise) => count + (exercise.type === "CARDIO" ? 0 : exercise.sets.length), 0) ?? 0,
     [session],
   )
 
@@ -410,7 +451,7 @@ export default function TrainingCurrentPage() {
       .filter((item) => item.status === "completed")
       .reduce<Record<string, PreviousPerformance>>((accumulator, workoutSession) => {
         workoutSession.exercises.forEach((exercise) => {
-          if (accumulator[exercise.exerciseId] || exercise.sets.length === 0) {
+          if (exercise.type === "CARDIO" || accumulator[exercise.exerciseId] || exercise.sets.length === 0) {
             return
           }
 
@@ -453,7 +494,7 @@ export default function TrainingCurrentPage() {
     setExerciseUiState((currentState) => {
       const nextState = {
         ...currentState,
-        [workoutExerciseId]: updater(currentState[workoutExerciseId] ?? { expanded: false, weight: "", reps: "" }),
+        [workoutExerciseId]: updater(currentState[workoutExerciseId] ?? (session ? buildInitialExerciseUiState(session)[workoutExerciseId] : undefined) ?? { expanded: false, weight: "", reps: "" }),
       }
 
       void persistExerciseUiState(nextState)
@@ -530,6 +571,7 @@ export default function TrainingCurrentPage() {
     setCreatingExercise(true)
 
     try {
+      if (pendingSyncCountRef.current > 0 || !await flushQueue(session.id)) throw new Error("Hay registros pendientes de guardar.")
       const updated = await api.addWorkoutExercise(session.id, { exerciseId: selectedExercise.id })
       await saveSessionSnapshot(updated)
       setSession(updated)
@@ -546,25 +588,39 @@ export default function TrainingCurrentPage() {
   }
 
   async function flushQueue(sessionId: string) {
-    const operations = await listSetOperations(sessionId)
-    if (operations.length === 0) {
-      return true
-    }
+    setPending(true)
+    const synced = await syncWorkoutQueue(sessionId)
+    setPending(!synced)
+    return synced
+  }
 
-    if (!navigator.onLine) {
-      return false
+  async function saveCardio(workoutExerciseId: string) {
+    const current = sessionRef.current
+    const draft = exerciseUiState[workoutExerciseId]
+    if (!current || !draft) return
+    const parsed = cardioResultInputSchema.safeParse({
+      durationMinutes: draft.durationMinutes?.trim() ? Number(draft.durationMinutes) : undefined,
+      distanceMeters: draft.distanceMeters?.trim() ? Number(draft.distanceMeters) : null,
+      inclinePercent: draft.inclinePercent?.trim() ? Number(draft.inclinePercent) : null,
+    })
+    if (!parsed.success) return
+    pendingSyncCountRef.current += 1
+    setPending(true)
+    try {
+      await queueCardioOperation(current.id, workoutExerciseId, parsed.data)
+      const latest = sessionRef.current ?? current
+      const nextSession = { ...latest, exercises: latest.exercises.map(item => item.id === workoutExerciseId ? {
+        ...item, cardioResult: { id: item.cardioResult?.id ?? crypto.randomUUID(), workoutExerciseId, ...parsed.data },
+      } : item) }
+      sessionRef.current = nextSession
+      setSession(nextSession)
+      await saveSessionSnapshot(nextSession)
+      await flushQueue(current.id)
+    } catch (cause) {
+      toast({ variant: "destructive", title: "No se pudo guardar cardio", description: cause instanceof Error ? cause.message : "Intenta nuevamente." })
+    } finally {
+      pendingSyncCountRef.current -= 1
     }
-
-    for (const operation of operations) {
-      try {
-        await api.upsertWorkoutSet(operation.sessionId, operation.workoutExerciseId, operation.payload)
-        await removeSetOperation(operation.id)
-      } catch {
-        return false
-      }
-    }
-
-    return true
   }
 
   async function saveSet(workoutExerciseId: string) {
@@ -573,7 +629,7 @@ export default function TrainingCurrentPage() {
     const draft = exerciseUiState[workoutExerciseId]
     const exercise = session.exercises.find((item) => item.id === workoutExerciseId)
 
-    if (!draft || !exercise || !draft.weight || !draft.reps) {
+    if (!draft || !exercise || exercise.type === "CARDIO" || !draft.weight || !draft.reps) {
       return
     }
 
@@ -646,6 +702,9 @@ export default function TrainingCurrentPage() {
       (exerciseId) => !nextRestTimers[exerciseId],
     )
 
+    pendingSyncCountRef.current += 1
+    setPending(true)
+    sessionRef.current = nextSession
     setSession(nextSession)
     setExerciseUiState(nextExerciseState)
     setRestTimers(nextRestTimers)
@@ -655,23 +714,15 @@ export default function TrainingCurrentPage() {
         void closeRestTimerNotification(session.id, exerciseId).catch(() => {})
       })
     }
-    await saveSessionSnapshot(nextSession)
-    await persistTrainingDraft({ exercises: nextExerciseState, restTimers: nextRestTimers })
-    await queueSetOperation(session.id, workoutExerciseId, payload)
-    pendingSyncCountRef.current += 1
-    setPending(true)
-
     try {
-      const synced = await api.upsertWorkoutSet(session.id, workoutExerciseId, payload)
-      const mergedSession = mergeWorkoutSessionState(sessionRef.current, synced)
-      await saveSessionSnapshot(mergedSession)
-      setSession(mergedSession)
-      await removeSetOperation(`${session.id}-${workoutExerciseId}-${setNumber}`)
-    } catch {
-      // Keep the queued operation to retry later when connectivity is restored.
+      await queueSetOperation(session.id, workoutExerciseId, payload)
+      await saveSessionSnapshot(nextSession)
+      await persistTrainingDraft({ exercises: nextExerciseState, restTimers: nextRestTimers })
+      await flushQueue(session.id)
+    } catch (cause) {
+      toast({ variant: "destructive", title: "No se pudo guardar la serie", description: cause instanceof Error ? cause.message : "Intenta nuevamente." })
     } finally {
       pendingSyncCountRef.current = Math.max(0, pendingSyncCountRef.current - 1)
-      setPending(pendingSyncCountRef.current > 0)
     }
   }
 
@@ -689,6 +740,7 @@ export default function TrainingCurrentPage() {
     setReplacingExercise(true)
 
     try {
+      if (pendingSyncCountRef.current > 0 || !await flushQueue(session.id)) throw new Error("Hay registros pendientes de guardar.")
       const updated = await api.replaceWorkoutExercise(session.id, exerciseToReplace.id, {
         exerciseId: replacementExercise.id,
       })
@@ -713,9 +765,10 @@ export default function TrainingCurrentPage() {
     setCompletingWorkout(true)
 
     try {
+      if (pendingSyncCountRef.current > 0) throw new Error("Espera a que termine el guardado actual.")
       const synced = await flushQueue(session.id)
       if (!synced) {
-        throw new Error("Todavia hay series pendientes de sincronizar. Espera un momento e intenta nuevamente.")
+        throw new Error("Todavia hay registros pendientes de sincronizar. Espera un momento e intenta nuevamente.")
       }
 
       const completed = await api.completeWorkoutSession(session.id)
@@ -847,7 +900,7 @@ export default function TrainingCurrentPage() {
               <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary/80">Sesión en curso</p>
               <h1 className="mt-1 text-2xl font-bold">{sessionDayName}</h1>
               <p className="text-sm text-muted-foreground">
-                {session.planName} · {totalCompletedSets} series guardadas {pending ? "· sincronizando..." : ""}
+                {session.planName} · {totalCompletedSets} series guardadas · {session.exercises.filter(item => item.type === "CARDIO" && item.cardioResult).length} cardio registrados {pending ? "· pendiente de sincronizar" : ""}
               </p>
             </div>
             <div className="rounded-full border border-primary/20 bg-background/80 px-3 py-1.5 text-sm font-semibold text-primary">
@@ -886,7 +939,7 @@ export default function TrainingCurrentPage() {
             <CardContent className="p-6 text-center">
               <p className="text-sm font-medium">Todavia no agregaste ejercicios</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Elige un ejercicio para empezar a registrar las series reales de hoy.
+                Elige un ejercicio para empezar a registrar el entrenamiento de hoy.
               </p>
             </CardContent>
           </Card>
@@ -925,7 +978,12 @@ export default function TrainingCurrentPage() {
               const showsSupersetRestTimer = supersetMembers.length !== 2 || restTimerExerciseId === exercise.id
 
               return (
-              <ExerciseCard
+              exercise.type === "CARDIO" ? <CardioExerciseCard key={exercise.id} exercise={exercise}
+                state={exerciseUiState[exercise.id] ?? buildInitialExerciseUiState(session)[exercise.id]}
+                onChange={patch => updateExerciseUi(exercise.id, current => ({ ...current, ...patch }))}
+                onSave={() => saveCardio(exercise.id)}
+                onReplace={!planless && !exercise.cardioResult ? () => openReplaceDialog(exercise) : undefined}
+              /> : <ExerciseCard
                 key={exercise.id}
                 exercise={exercise}
                 exerciseIndex={exerciseIndex}
@@ -1092,7 +1150,7 @@ export default function TrainingCurrentPage() {
             <ExerciseSearchSelect
               value={replacementExercise?.id ?? ""}
               selectedExercise={replacementExercise ?? undefined}
-              searchExercises={(query) => api.getExercises(query, 20)}
+              searchExercises={async (query) => (await api.getExercises(query, 50)).filter(item => item.type === (exerciseToReplace?.type ?? "STRENGTH"))}
               onSelect={setReplacementExercise}
               placeholder="Selecciona el ejercicio real"
             />
@@ -1182,13 +1240,13 @@ function ExerciseCard({
   onToggleRestTimer: () => void
 }) {
   const completed = getExerciseCompletion(exercise)
-  const displayRowCount = Math.max(exercise.targetSets, exercise.sets.length + 1)
+  const displayRowCount = Math.max(exercise.targetSets ?? 0, exercise.sets.length + 1)
   const timerReference = restTimer?.pausedAt ?? now
   const elapsedRestSeconds = restTimer
     ? Math.max(0, Math.floor((timerReference - restTimer.startedAt) / 1000))
     : 0
-  const remainingRestSeconds = Math.max(0, exercise.restSeconds - elapsedRestSeconds)
-  const overtimeSeconds = Math.max(0, elapsedRestSeconds - exercise.restSeconds)
+  const remainingRestSeconds = Math.max(0, (exercise.restSeconds ?? 0) - elapsedRestSeconds)
+  const overtimeSeconds = Math.max(0, elapsedRestSeconds - (exercise.restSeconds ?? 0))
 
   return (
     <Card
@@ -1227,7 +1285,7 @@ function ExerciseCard({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              {exercise.targetSets > 0 || exercise.targetReps.trim().length > 0
+              {(exercise.targetSets ?? 0) > 0 || (exercise.targetReps ?? "").trim().length > 0
                 ? `${exercise.targetSets} series x ${exercise.targetReps} reps · ${exercise.restSeconds}s descanso`
                 : "Sin objetivo predefinido"}
             </p>
@@ -1315,7 +1373,7 @@ function ExerciseCard({
                     <Input
                       type="number"
                       inputMode="numeric"
-                      placeholder={exercise.targetReps}
+                      placeholder={exercise.targetReps ?? ""}
                       value={isEditableRow ? state.reps : savedSet ? String(savedSet.reps) : ""}
                       onChange={(event) => onDraftChange("reps", event.target.value)}
                       className="h-10 border-0 bg-secondary/90 text-center font-medium"
