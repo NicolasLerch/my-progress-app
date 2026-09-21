@@ -6,21 +6,26 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import type {
   ExerciseDTO,
   OverallProgressAnalysisDTO,
+  PlanDTO,
   ProgressAnalysisDTO,
   ProgressMetricAnalysisDTO,
   ProgressPointDTO,
   ProgressSeriesDTO,
+  ProgressSessionFiltersDTO,
   ProgressStatus,
 } from "@my-progress/shared"
 import { AppLoadingIndicator } from "@/components/app-loading-indicator"
 import { ExerciseSearchSelect } from "@/components/exercise-search-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuthReady } from "@/hooks/use-auth-ready"
 import { api } from "@/lib/api"
 import { formatShortDate, formatWeight } from "@/lib/format"
 
 type ProgressMetric = "weight" | "volume" | "reps"
+type ProgressPeriod = "historic" | "1m" | "3m" | "6m" | "custom"
 type ChartPoint = ProgressPointDTO & {
   displayDate: string
   weightIndex?: number
@@ -74,6 +79,12 @@ const METRICS: Record<ProgressMetric, {
 export default function ProgressPage() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseDTO | null>(null)
   const [series, setSeries] = useState<ProgressSeriesDTO | null>(null)
+  const [plans, setPlans] = useState<PlanDTO[]>([])
+  const [selectedPlanId, setSelectedPlanId] = useState("all")
+  const [period, setPeriod] = useState<ProgressPeriod>("historic")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
+  const [includePlanless, setIncludePlanless] = useState(false)
   const [activeMetrics, setActiveMetrics] = useState<ProgressMetric[]>(["weight"])
   const { isLoading, isReady, session } = useAuthReady()
 
@@ -87,12 +98,32 @@ export default function ProgressPage() {
   }, [isReady])
 
   useEffect(() => {
-    if (!isReady || !selectedExercise?.id) {
+    if (!isReady) return
+    api.getPlans().then((items) => {
+      setPlans(items)
+      setSelectedPlanId(items.find((plan) => plan.status === "active")?.id ?? "all")
+    }).catch(() => {})
+  }, [isReady])
+
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId)
+  const progressFilters = useMemo<ProgressSessionFiltersDTO | null>(() => {
+    const range = resolveProgressRange(selectedPlan, period, customFrom, customTo)
+    if (!range) return null
+
+    return {
+      planId: selectedPlanId === "all" ? undefined : selectedPlanId,
+      includePlanless,
+      ...range,
+    }
+  }, [customFrom, customTo, includePlanless, period, selectedPlan, selectedPlanId])
+
+  useEffect(() => {
+    if (!isReady || !selectedExercise?.id || !progressFilters) {
       setSeries(null)
       return
     }
-    api.getProgressSeries(selectedExercise.id).then(setSeries).catch(() => {})
-  }, [isReady, selectedExercise?.id])
+    api.getProgressSeries(selectedExercise.id, progressFilters).then(setSeries).catch(() => {})
+  }, [isReady, progressFilters, selectedExercise?.id])
 
   useEffect(() => {
     if (!session) {
@@ -143,6 +174,7 @@ export default function ProgressPage() {
   }, [isComparing, metricBaselines, rawChartData, visibleMetrics])
 
   const selectedMetric = activeMetrics.length === 1 ? activeMetrics[0] : null
+  const progressLabel = period === "historic" ? "Progreso desde el inicio" : "Progreso del periodo"
   const metricCards = useMemo(() => {
     if (!series || rawChartData.length === 0) {
       return null
@@ -167,19 +199,19 @@ export default function ProgressPage() {
           hint: formatShortDate(metricAnalysis.maxDate),
           accentColor: config.color,
         },
-        analysisCard("Progreso desde el inicio", metricAnalysis.historical, "Primeras 3 vs ultimas 3", analysis),
+        analysisCard(progressLabel, metricAnalysis.historical, period === "historic" ? "Primeras 3 vs ultimas 3" : "Dentro del periodo", analysis),
         analysisCard("Tendencia reciente", metricAnalysis.recent, "Ultimas 6 sesiones", analysis),
       ]
     }
 
     const comparisonCards = visibleMetrics.map((metric) => {
       const config = METRICS[metric]
-      return analysisCard(config.label, analysis[config.analysisKey].historical, "Progreso desde el inicio", analysis, config.color)
+      return analysisCard(config.label, analysis[config.analysisKey].historical, progressLabel, analysis, config.color)
     })
     const overallCard = analysisCard("General", analysis.overall.historical, "PR, volumen y repeticiones", analysis)
 
     return [...comparisonCards, { ...overallCard, wide: comparisonCards.length === 2 }]
-  }, [rawChartData, selectedMetric, series, visibleMetrics])
+  }, [period, progressLabel, rawChartData, selectedMetric, series, visibleMetrics])
 
   const analysisSummary = useMemo(
     () => series ? buildAnalysisSummary(series.analysis, visibleMetrics) : null,
@@ -215,6 +247,80 @@ export default function ProgressPage() {
         placeholder="Selecciona un ejercicio con historial"
         emptyMessage="No hay ejercicios con historial para esa busqueda."
       />
+
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground" htmlFor="progress-plan">Plan</label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger id="progress-plan" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los planes</SelectItem>
+                  {plans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>{plan.name}{plan.status === "active" ? " (activo)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground" htmlFor="progress-period">Periodo</label>
+              <Select value={period} onValueChange={(value) => setPeriod(value as ProgressPeriod)}>
+                <SelectTrigger id="progress-period" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="historic">Historico</SelectItem>
+                  <SelectItem value="1m">Ultimo mes</SelectItem>
+                  <SelectItem value="3m">Ultimos 3 meses</SelectItem>
+                  <SelectItem value="6m">Ultimos 6 meses</SelectItem>
+                  <SelectItem value="custom">Personalizado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {period === "custom" && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1 text-xs text-muted-foreground">
+                Desde
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(event) => setCustomFrom(event.target.value)}
+                  className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-muted-foreground">
+                Hasta
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(event) => setCustomTo(event.target.value)}
+                  className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm"
+                />
+              </label>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={includePlanless}
+              onCheckedChange={(checked) => setIncludePlanless(checked === true)}
+            />
+            Incluir sesiones libres
+          </label>
+
+          {!progressFilters && (
+            <p className="text-xs text-destructive">La fecha desde no puede ser posterior a la fecha hasta.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4">
@@ -361,6 +467,15 @@ function analysisCard(
   }
 
   if (!analysis.canAnalyzeProgress) {
+    if (analysis.comparisonUnavailableReason === "mixed_plans") {
+      return {
+        label,
+        value: "Elegí un plan",
+        hint: "Las comparaciones requieren un plan especifico",
+        accentColor,
+      }
+    }
+
     return {
       label,
       value: `Faltan ${analysis.sessionsRemaining} ${sessionLabel(analysis.sessionsRemaining)}`,
@@ -378,7 +493,15 @@ function analysisCard(
 }
 
 function buildAnalysisSummary(analysis: ProgressAnalysisDTO, visibleMetrics: ProgressMetric[]): string[] {
+  if (analysis.sessionCount === 0) {
+    return ["No hay registros para los filtros seleccionados."]
+  }
+
   if (!analysis.canAnalyzeProgress) {
+    if (analysis.comparisonUnavailableReason === "mixed_plans") {
+      return ["El historial completo muestra valores y records globales. Elegi un plan para comparar progreso y tendencia."]
+    }
+
     return [`Necesitas ${analysis.sessionsRemaining} ${sessionLabel(analysis.sessionsRemaining)} mas para analizar tu progreso.`]
   }
 
@@ -529,4 +652,33 @@ function formatAxisValue(value: number, metric: ProgressMetric, isComparing: boo
   }
 
   return Math.round(value).toString()
+}
+
+function resolveProgressRange(
+  plan: PlanDTO | undefined,
+  period: ProgressPeriod,
+  customFrom: string,
+  customTo: string,
+): Pick<ProgressSessionFiltersDTO, "from" | "to"> | null {
+  if (period === "custom") {
+    if (!customFrom || !customTo || customFrom > customTo) return null
+    return { from: customFrom, to: customTo }
+  }
+
+  if (period === "historic") {
+    if (!plan) return {}
+    return {
+      from: toDateInput(plan.startDate),
+      to: plan.status === "active" ? toDateInput(new Date().toISOString()) : plan.endDate ? toDateInput(plan.endDate) : undefined,
+    }
+  }
+
+  const months = period === "1m" ? 1 : period === "3m" ? 3 : 6
+  const from = new Date()
+  from.setMonth(from.getMonth() - months)
+  return { from: toDateInput(from.toISOString()), to: toDateInput(new Date().toISOString()) }
+}
+
+function toDateInput(value: string) {
+  return value.slice(0, 10)
 }

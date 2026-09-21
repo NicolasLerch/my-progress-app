@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { buildProgressSeries } from "../dist/metrics.js"
+import { buildProgressSeries, filterProgressSessions } from "../dist/metrics.js"
 
 const exercise = { id: "squat", name: "Sentadilla", muscleGroup: "Piernas" }
 
@@ -115,4 +115,42 @@ test("does not produce percentages or overall analysis when a baseline is zero",
   assert.equal(series.analysis.repetitions.historical?.status, "positive")
   assert.equal(series.analysis.overall.historical, undefined)
   assert.equal(Number.isFinite(series.analysis.repetitions.historical?.changePercent ?? NaN), true)
+})
+
+test("filters sessions by plan, period, and optional planless sessions", () => {
+  const planA = { ...session("2026-01-10", [[100, 10]]), planId: "plan-a" }
+  const planB = { ...session("2026-01-15", [[110, 10]]), planId: "plan-b" }
+  const planless = session("2026-01-20", [[120, 10]])
+
+  assert.deepEqual(
+    filterProgressSessions([planA, planB, planless], { planId: "plan-a" }).map((item) => item.id),
+    ["2026-01-10"],
+  )
+  assert.deepEqual(
+    filterProgressSessions([planA, planB, planless], { planId: "plan-a", includePlanless: true }).map((item) => item.id),
+    ["2026-01-10", "2026-01-20"],
+  )
+  assert.deepEqual(
+    filterProgressSessions([planA, planB, planless], { from: "2026-01-12", to: "2026-01-20" }).map((item) => item.id),
+    ["2026-01-15"],
+  )
+  assert.deepEqual(
+    filterProgressSessions([planA, planB, planless], {
+      from: "2026-01-12",
+      to: "2026-01-20",
+      includePlanless: true,
+    }).map((item) => item.id),
+    ["2026-01-15", "2026-01-20"],
+  )
+})
+
+test("marks comparisons unavailable when viewing all plans", () => {
+  const sessions = Array.from({ length: 6 }, (_, index) =>
+    ({ ...session(`2026-02-0${index + 1}`, [[100 + index, 10]]), planId: `plan-${index % 2}` }),
+  )
+  const series = buildProgressSeries(exercise, sessions, { comparisonsEnabled: false })
+
+  assert.equal(series.analysis.canAnalyzeProgress, false)
+  assert.equal(series.analysis.comparisonUnavailableReason, "mixed_plans")
+  assert.equal(series.analysis.pr.historical, undefined)
 })
