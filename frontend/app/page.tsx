@@ -77,6 +77,16 @@ export default function HomePage() {
     }
   }, [carouselApi])
 
+  useEffect(() => {
+    if (!carouselApi || !data?.activePlan || !data.todayDay) return
+
+    const todayDayIndex = data.activePlan.days.findIndex((day) => day.id === data.todayDay?.id)
+    if (todayDayIndex < 0) return
+
+    carouselApi.scrollTo(todayDayIndex, true)
+    setSelectedSlide(todayDayIndex)
+  }, [carouselApi, data?.activePlan, data?.todayDay])
+
   async function startPlannedWorkout(planDayId: string) {
     if (!data?.activePlan) return
 
@@ -140,6 +150,13 @@ export default function HomePage() {
   const { activePlan, currentSession } = data
   const lastSession = data.recentSessions[0]
   const isStarting = Boolean(startingPlanDayId) || startingPlanless
+  const hasCompletedPlanDayToday = data.completedPlanDayIdsToday.length > 0
+  const completedTodayDayIndex = activePlan && hasCompletedPlanDayToday
+    ? activePlan.days.findIndex((day) => day.id === data.todayDay?.id)
+    : -1
+  const nextPlanDayId = activePlan && completedTodayDayIndex >= 0
+    ? activePlan.days[(completedTodayDayIndex + 1) % activePlan.days.length]?.id
+    : undefined
 
   return (
     <div className="flex w-full flex-col gap-7 pb-6">
@@ -190,7 +207,9 @@ export default function HomePage() {
                 <CarouselContent className="!ml-0">
                   {activePlan.days.map((day) => {
                     const { visibleExercises, remainingCount } = getExercisePreview(day)
-                    const isCurrentDay = day.id === data.todayDay?.id
+                    const isCompletedToday = data.completedPlanDayIdsToday.includes(day.id)
+                    const isToday = !hasCompletedPlanDayToday && day.id === data.todayDay?.id
+                    const isNextDay = hasCompletedPlanDayToday && day.id === nextPlanDayId
                     const isStartingThisDay = startingPlanDayId === day.id
 
                     return (
@@ -208,7 +227,13 @@ export default function HomePage() {
                           <div className="relative flex min-h-[27rem] flex-col justify-end gap-4 p-5 text-white">
                             <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-white/75">
                               <span>Día {day.order}</span>
-                              {isCurrentDay && <span className="rounded-full bg-primary px-2.5 py-1 text-primary-foreground">Hoy</span>}
+                              {isCompletedToday ? (
+                                <span className="rounded-full bg-white/20 px-2.5 py-1 text-white">Finalizado</span>
+                              ) : isNextDay ? (
+                                <span className="rounded-full bg-primary px-2.5 py-1 text-primary-foreground">Próximo</span>
+                              ) : isToday ? (
+                                <span className="rounded-full bg-primary px-2.5 py-1 text-primary-foreground">Hoy</span>
+                              ) : null}
                             </div>
                             <div>
                               <h3 className="text-3xl font-bold tracking-tight">{day.name}</h3>

@@ -131,6 +131,7 @@ export interface HomeTodayDTO {
   user: UserDTO
   activePlan?: PlanDTO
   todayDay?: PlanDayDTO
+  completedPlanDayIdsToday: string[]
   currentSession?: WorkoutSessionDTO
   recentSessions: WorkoutSessionDTO[]
   stats: HomeStatsDTO
