@@ -23,6 +23,16 @@ const exerciseSearchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
 })
 
+const progressSeriesQuerySchema = z.object({
+  planId: z.string().trim().min(1).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  includePlanless: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
+}).refine(
+  (query) => !query.from || !query.to || query.from <= query.to,
+  { message: "La fecha desde no puede ser posterior a la fecha hasta.", path: ["to"] },
+)
+
 export async function registerRoutes(app: FastifyInstance) {
   const repository = new PrismaRepository(prisma)
 
@@ -244,9 +254,11 @@ export async function registerRoutes(app: FastifyInstance) {
   })
 
   app.get("/progress/exercises/:exerciseId", async (request, reply) => {
+    const filters = progressSeriesQuerySchema.parse(request.query)
     const series = await repository.getProgressSeries(
       request.user.id,
       (request.params as { exerciseId: string }).exerciseId,
+      filters,
     )
     if (!series) {
       return reply.code(404).send({ message: "Exercise not found." })

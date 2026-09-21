@@ -3,6 +3,7 @@ import { RoutineImportError } from '../services/routine-import/errors.js'
 import type { Prisma as PrismaNamespace, PrismaClient as PrismaClientType } from "@prisma/client"
 import {
   buildProgressSeries,
+  filterProgressSessions,
   cardioResultInputSchema,
   updatePlanDayInputSchema,
   type CardioResultInputDTO,
@@ -19,6 +20,7 @@ import {
   type PlanDTO,
   type PlanExerciseDTO,
   type ProgressSeriesDTO,
+  type ProgressSessionFiltersDTO,
   type ReplaceWorkoutExerciseInputDTO,
   type UpdateUserProfileInputDTO,
   type UserProfileDTO,
@@ -1135,7 +1137,11 @@ export class PrismaRepository {
     return exercises.map(mapExercise)
   }
 
-  async getProgressSeries(userId: string, exerciseId: string): Promise<ProgressSeriesDTO | null> {
+  async getProgressSeries(
+    userId: string,
+    exerciseId: string,
+    filters: ProgressSessionFiltersDTO = {},
+  ): Promise<ProgressSeriesDTO | null> {
     const exercise = await this.prisma.exercise.findUnique({
       where: { id: exerciseId },
     })
@@ -1213,6 +1219,8 @@ export class PrismaRepository {
       ],
     }))
 
+    const filteredSessions = filterProgressSessions(sessions, filters)
+
     return buildProgressSeries(
       {
         id: exercise.id,
@@ -1220,7 +1228,8 @@ export class PrismaRepository {
         muscleGroup: exercise.muscleGroup,
         type: exercise.type,
       },
-      sessions,
+      filteredSessions,
+      { comparisonsEnabled: Boolean(filters.planId) },
     )
   }
 
