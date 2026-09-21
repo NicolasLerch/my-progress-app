@@ -190,6 +190,7 @@ export interface OverallProgressAnalysisDTO {
 export interface ProgressAnalysisDTO {
   sessionCount: number
   canAnalyzeProgress: boolean
+  comparisonUnavailableReason?: "mixed_plans"
   sessionsRequired: number
   sessionsRemaining: number
   pr: ProgressMetricAnalysisDTO
@@ -199,6 +200,13 @@ export interface ProgressAnalysisDTO {
     historical?: OverallProgressAnalysisDTO
     recent?: OverallProgressAnalysisDTO
   }
+}
+
+export interface ProgressSessionFiltersDTO {
+  planId?: string
+  from?: string
+  to?: string
+  includePlanless?: boolean
 }
 
 export interface ProgressSeriesDTO {

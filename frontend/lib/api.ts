@@ -7,6 +7,7 @@ import type {
   HistoryItemDTO,
   HomeTodayDTO,
   PlanDTO,
+  ProgressSessionFiltersDTO,
   ProgressSeriesDTO,
   ReplaceWorkoutExerciseInputDTO,
   UpdateUserProfileInputDTO,
@@ -31,7 +32,7 @@ function getApiUrl() {
   throw new Error("NEXT_PUBLIC_API_URL no esta configurada para produccion.")
 }
 
-function withSearchParams(path: string, params: Record<string, string | number | undefined>) {
+function withSearchParams(path: string, params: object) {
   const searchParams = new URLSearchParams()
 
   Object.entries(params).forEach(([key, value]) => {
@@ -163,6 +164,6 @@ export const api = {
   getHistorySession: (sessionId: string) => request<WorkoutSessionDTO>(`/history/${sessionId}`),
   getProgressExercises: (query?: string, limit?: number) =>
     request<ExerciseDTO[]>(withSearchParams("/progress/exercises", { query, limit })),
-  getProgressSeries: (exerciseId: string) =>
-    request<ProgressSeriesDTO>(`/progress/exercises/${exerciseId}`),
+  getProgressSeries: (exerciseId: string, filters: ProgressSessionFiltersDTO = {}) =>
+    request<ProgressSeriesDTO>(withSearchParams(`/progress/exercises/${exerciseId}`, filters)),
 }

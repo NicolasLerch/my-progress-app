@@ -5,6 +5,7 @@ import type {
   ProgressChangeDTO,
   ProgressMetricAnalysisDTO,
   ProgressPointDTO,
+  ProgressSessionFiltersDTO,
   ProgressSeriesDTO,
   ProgressStatus,
   WorkoutSessionDTO,
@@ -21,6 +22,9 @@ export const PROGRESS_WEIGHTS = {
 
 type ProgressMetricKey = "weight" | "volume" | "reps"
 type IndexedProgressPoint = ProgressPointDTO & { timestamp: number; sequence: number }
+export interface ProgressSeriesOptions {
+  comparisonsEnabled?: boolean
+}
 
 export function calculateSessionVolume(session: WorkoutSessionDTO): number {
   return session.exercises.reduce((sessionTotal, exercise) => {
@@ -33,6 +37,7 @@ export function calculateSessionVolume(session: WorkoutSessionDTO): number {
 export function buildProgressSeries(
   exercise: ExerciseDTO,
   sessions: WorkoutSessionDTO[],
+  options: ProgressSeriesOptions = {},
 ): ProgressSeriesDTO {
   const points = exercise.type === "CARDIO" ? [] : buildProgressPoints(exercise.id, sessions)
   const stats = buildLegacyStats(points)
@@ -41,8 +46,38 @@ export function buildProgressSeries(
     exercise,
     points: points.map(({ timestamp: _timestamp, sequence: _sequence, ...point }) => point),
     stats,
-    analysis: buildProgressAnalysis(points),
+    analysis: buildProgressAnalysis(points, options.comparisonsEnabled ?? true),
   }
+}
+
+export function filterProgressSessions(
+  sessions: WorkoutSessionDTO[],
+  filters: ProgressSessionFiltersDTO,
+): WorkoutSessionDTO[] {
+  const from = parseRangeBoundary(filters.from, false)
+  const to = parseRangeBoundary(filters.to, true)
+
+  return sessions.filter((session) => {
+    const timestamp = Date.parse(session.date)
+    if (!Number.isFinite(timestamp) || (from !== undefined && timestamp < from) || (to !== undefined && timestamp > to)) {
+      return false
+    }
+
+    if (filters.planId) {
+      return session.planId === filters.planId || (filters.includePlanless === true && !session.planId)
+    }
+
+    return session.planId !== undefined || filters.includePlanless === true
+  })
+}
+
+function parseRangeBoundary(value: string | undefined, endOfDay: boolean): number | undefined {
+  if (!value) return undefined
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
+    : value
+  const timestamp = Date.parse(normalized)
+  return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
 function buildProgressPoints(exerciseId: string, sessions: WorkoutSessionDTO[]): IndexedProgressPoint[] {
@@ -103,9 +138,9 @@ function buildLegacyStats(points: IndexedProgressPoint[]): ProgressSeriesDTO["st
   }
 }
 
-function buildProgressAnalysis(points: IndexedProgressPoint[]): ProgressAnalysisDTO {
+function buildProgressAnalysis(points: IndexedProgressPoint[], comparisonsEnabled: boolean): ProgressAnalysisDTO {
   const sessionCount = points.length
-  const canAnalyzeProgress = sessionCount >= PROGRESS_MIN_SESSIONS
+  const canAnalyzeProgress = comparisonsEnabled && sessionCount >= PROGRESS_MIN_SESSIONS
   const sessionsRemaining = Math.max(PROGRESS_MIN_SESSIONS - sessionCount, 0)
   const pr = buildMetricAnalysis(points, "weight", canAnalyzeProgress)
   const volume = buildMetricAnalysis(points, "volume", canAnalyzeProgress)
@@ -114,6 +149,7 @@ function buildProgressAnalysis(points: IndexedProgressPoint[]): ProgressAnalysis
   return {
     sessionCount,
     canAnalyzeProgress,
+    comparisonUnavailableReason: comparisonsEnabled ? undefined : "mixed_plans",
     sessionsRequired: PROGRESS_MIN_SESSIONS,
     sessionsRemaining,
     pr,
