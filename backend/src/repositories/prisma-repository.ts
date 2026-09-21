@@ -199,6 +199,17 @@ function minutesBetween(startedAt: Date, completedAt: Date) {
   return Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 60000))
 }
 
+const buenosAiresDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Argentina/Buenos_Aires",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function getBuenosAiresDayKey(date: Date) {
+  return buenosAiresDayFormatter.format(date)
+}
+
 type ExerciseSearchRow = {
   type: ExerciseType
   id: string
@@ -671,11 +682,34 @@ export class PrismaRepository {
     )
 
     const mappedActivePlan = activePlan ? mapPlan(activePlan) : undefined
+    const completedPlanSessions = activePlan
+      ? await this.prisma.workoutSession.findMany({
+          where: {
+            userId: user.id,
+            planId: activePlan.id,
+            planDayId: { not: null },
+            status: "completed",
+            completedAt: { not: null },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { planDayId: true, completedAt: true },
+        })
+      : []
+    const todayKey = getBuenosAiresDayKey(new Date())
+    const completedPlanDayIdsToday = [...new Set(
+      completedPlanSessions
+        .filter((session) => session.completedAt && getBuenosAiresDayKey(session.completedAt) === todayKey)
+        .map((session) => session.planDayId!)
+    )]
+    const lastCompletedPlanDayId = completedPlanDayIdsToday[0]
+    const scheduledDay = mappedActivePlan?.days.find((day) => day.order === mappedActivePlan.currentDay)
+    const completedTodayDay = mappedActivePlan?.days.find((day) => day.id === lastCompletedPlanDayId)
 
     return {
       user: mapUser(dbUser ?? { ...user, createdAt: demoUser.createdAt }),
       activePlan: mappedActivePlan,
-      todayDay: mappedActivePlan?.days.find((day) => day.order === mappedActivePlan.currentDay),
+      todayDay: completedTodayDay ?? scheduledDay,
+      completedPlanDayIdsToday,
       currentSession: currentSession ? mapWorkoutSession(currentSession) : undefined,
       recentSessions: recentSessions.map(mapWorkoutSession),
       stats: {
@@ -1012,27 +1046,45 @@ export class PrismaRepository {
   }
 
   async completeWorkoutSession(userId: string, sessionId: string): Promise<WorkoutSessionDTO | null> {
-    const existing = await this.prisma.workoutSession.findFirst({
-      where: { id: sessionId, userId },
-      select: { id: true, startedAt: true },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.workoutSession.findFirst({
+        where: { id: sessionId, userId },
+        select: { id: true, status: true, startedAt: true, planId: true, planDayId: true },
+      })
+
+      if (!existing) return null
+
+      if (existing.status !== "in_progress") {
+        const session = await tx.workoutSession.findUnique({ where: { id: sessionId }, include: workoutSessionInclude })
+        return session ? mapWorkoutSession(session) : null
+      }
+
+      const completedAt = new Date()
+      const session = await tx.workoutSession.update({
+        where: { id: sessionId },
+        data: {
+          status: "completed",
+          completedAt,
+          durationMinutes: minutesBetween(existing.startedAt, completedAt),
+        },
+        include: workoutSessionInclude,
+      })
+
+      if (existing.planId && existing.planDayId) {
+        const plan = await tx.plan.findFirst({
+          where: { id: existing.planId, userId },
+          select: { days: { orderBy: { order: "asc" }, select: { id: true, order: true } } },
+        })
+        const completedDayIndex = plan?.days.findIndex((day) => day.id === existing.planDayId) ?? -1
+
+        if (plan && completedDayIndex >= 0) {
+          const nextDay = plan.days[(completedDayIndex + 1) % plan.days.length]
+          await tx.plan.update({ where: { id: existing.planId }, data: { currentDay: nextDay.order } })
+        }
+      }
+
+      return mapWorkoutSession(session)
     })
-
-    if (!existing) {
-      return null
-    }
-
-    const completedAt = new Date()
-    const session = await this.prisma.workoutSession.update({
-      where: { id: sessionId },
-      data: {
-        status: "completed",
-        completedAt,
-        durationMinutes: minutesBetween(existing.startedAt, completedAt),
-      },
-      include: workoutSessionInclude,
-    })
-
-    return mapWorkoutSession(session)
   }
 
   async getHistory(userId: string): Promise<HistoryItemDTO[]> {
